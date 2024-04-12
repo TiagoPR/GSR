@@ -1,0 +1,177 @@
+-- Structures:
+-- (1) device Group
+-- (2) sensors Table
+-- (3) actuators Table
+
+-- device (1)
+-- This group includes objects that represent characteristics of a Domotics device.
+device OBJECT {
+TYPE Group
+INCLUDE id, type, beaconRate, nSensors, nActuators, dateAndTime, upTime, lastTimeUpdated,
+operationalStatus, reset
+NOTIFICATION id, type, nSensores, nAtuadores, dateAndTime, upTime, lastTimeUpdated,
+operationalStatus
+NOTIFICATION-RATE beaconRate
+DESCRIPTION "Simple list of objects, where each object represents a characteristic
+from a domotics device."
+IID 1 }
+
+device.id OBJECT {
+TYPE String
+ACESS read-only
+DESCRIPTION "Tag identifying the device (the MacAddress, for example)."
+IID 1.1 }
+
+device.type OBJECT {
+TYPE String
+ACESS read-only
+DESCRIPTION "Text description for the type of device (“Lights & A/C Conditioning”, for
+example)."
+IID 1.2 }
+
+device.beaconRate OBJECT {
+TYPE Integer
+ACESS read-write
+DESCRIPTION "Frequency rate in seconds for issuing a notification message with information
+from this group that acts as a beacon broadcasting message to all the managers in the LAN.
+If value is set to zero the notifications for this group are halted."
+IID 1.3 }
+
+device.nSensors OBJECT {
+TYPE Integer
+ACESS read-only
+DESCRIPTION "Number of sensors implemented in the device and present in the sensors
+Table."
+IID 1.4 }
+
+device.nActuators OBJECT {
+TYPE Integer
+ACESS read-only
+DESCRIPTION Number of actuators implemented in the device and present in the actuators
+Table."
+IID 1.5 }
+
+device.dateAndTime OBJECT {
+TYPE Timestamp
+ACESS read-write
+DESCRIPTION "System date and time setup in the device."
+IID 1.6 }
+
+device.upTime OBJECT {
+TYPE Timestamp
+ACESS read-only
+DESCRIPTION "For how long the device is working since last boot/reset."
+IID 1.7 }
+
+device.lastTimeUpdated OBJECT {
+TYPE Timestamp
+ACESS read-only
+DESCRIPTION "Date and time of the last update of any object in the device L-MIBvS."
+IID 1.8 }
+
+device.operationalStatus OBJECT {
+TYPE Integer
+ACESS read-only
+DESCRIPTION "The operational state of the device, where the value 0
+corresponds to a standby operational state, 1 corresponds to a normal operational state
+and 2 or greater corresponds to an non-operational error state."
+IID 1.9 }
+
+device.reset OBJECT {
+TYPE Integer
+ACESS read-write
+DESCRIPTION "Value 0 means no reset and value 1 means a reset procedure must be done."
+IID 1.10 }
+
+-- sensors (2)
+-- This Table includes objects that permit access to all sampled values from all the
+-- sensors in the device
+sensors OBJECT {
+TYPE Table
+INCLUDE id, type, status, minValue, maxValue, lastSamplingTime
+DESCRIPTION "Table with information for all types of sensors connected to the device."
+IID 2 }
+
+sensors.id OBJECT {
+TYPE String
+ACESS read-only
+DESCRIPTION "Tag identifying the sensor (the MacAddress, for example)."
+IID 2.1 }
+
+sensors.type OBJECT {
+TYPE String
+ACESS read-only
+DESCRIPTION "Text description for the type of sensor (“Light”, for example)."
+IID 2.2 }
+
+sensors.status OBJECT {
+TYPE Integer
+ACESS read-only
+DESCRIPTION "Last value sampled by the sensor in percentage of the interval between
+minValue and maxValue."
+IID 2.3 }
+
+sensors.minValue OBJECT {
+TYPE Integer
+ACESS read-only
+DESCRIPTION "Minimum value possible for the sampling values of the sensor."
+IID 2.4 }
+
+sensors.maxValue OBJECT {
+TYPE Integer
+ACESS read-only
+DESCRIPTION "Maximum value possible for the sampling values of the sensor."
+IID 2.5 }
+
+sensors.lastSamplingTime OBJECT {
+TYPE Timestamp
+ACESS read-only
+DESCRIPTION "Time elapsed since the last sample was obtained by the sensor."
+IID 2.6 }
+
+-- actuators (3)
+-- This Table includes objects that permit control over all the actuators
+-- in the device
+
+actuators OBJECT {
+TYPE Table
+INCLUDE id, type, status, minValue, maxValue, lastControlTime
+DESCRIPTION "Table with objects to control all actuators connected to the device."
+IID 3 }
+
+actuators.id OBJECT {
+TYPE String
+ACESS read-only
+DESCRIPTION "Tag identifying the actuator (the MacAddress, for example)."
+IID 3.1 }
+
+actuators.type OBJECT {
+TYPE String
+ACESS read-only
+DESCRIPTION "Text description for the type of actuator (“Temperature”, for example)."
+IID 3.2 }
+
+actuators.status OBJECT {
+TYPE Integer
+ACESS read-write
+DESCRIPTION "Configuration value set for the actuator (value must be between minValue and
+maxValue)."
+IID 3.3 }
+
+actuators.minValue OBJECT {
+TYPE Integer
+ACESS read-only
+DESCRIPTION "Minimum value possible for the configuration of the actuator."
+IID 3.4 }
+
+actuators.maxValue OBJECT {
+TYPE Integer
+ACESS read-only
+DESCRIPTION "Maximum value possible for the configuration of the actuator."
+IID 3.5 }
+
+actuators.lastControlTime OBJECT {
+TYPE Timestamp
+ACESS read-only
+DESCRIPTION "Date and time when the last configuration/control operation was executed."
+IID 3.6 }
