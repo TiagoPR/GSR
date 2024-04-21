@@ -1,7 +1,10 @@
-package snmp
+package main
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
+	"gsr"
 	"net"
 )
 
@@ -19,7 +22,7 @@ func sendResponse(conn *net.UDPConn, addr *net.UDPAddr) {
 	}
 }
 
-func SetupAgente() {
+func main() {
 	p := make([]byte, 2048)
 	addr := net.UDPAddr{
 		Port: 1234,
@@ -30,13 +33,28 @@ func SetupAgente() {
 		fmt.Printf("Some error %v\n", err)
 		return
 	}
+
 	for {
-		_, remoteaddr, err := ser.ReadFromUDP(p)
-		fmt.Printf("Read a message from %v %s \n", remoteaddr, p)
+
+		n, remoteaddr, err := ser.ReadFromUDP(p)
 		if err != nil {
-			fmt.Printf("Some error  %v", err)
+			fmt.Printf("Some error %v", err)
 			continue
 		}
-		go sendResponse(ser, remoteaddr)
+		fmt.Printf("Read a message from %v \n", remoteaddr)
+
+		receivedPDU := gsr.PDU{}
+
+		dec := gob.NewDecoder(bytes.NewReader(p[:n])) // Will read from network.
+		err = dec.Decode(&receivedPDU)
+		if err != nil {
+			// Error decoding message: unexpected EOF [ERROR HERE]
+			fmt.Printf("Error decoding message: %v\n", err)
+			continue
+		}
+
+		// Print the received PDU.
+		receivedPDU.Print()
+		// go sendResponse(ser, remoteaddr)
 	}
 }
