@@ -61,12 +61,12 @@ func main() {
 	ip := os.Args[1]
 
 	addr := net.UDPAddr{
-		Port: 1053,
+		Port: 161,
 		IP:   net.ParseIP(ip),
 	}
 
 	gestorAddr := net.UDPAddr{
-		Port: 1053,
+		Port: 162,
 		IP:   net.ParseIP("127.0.0.1"),
 	}
 

@@ -82,7 +82,7 @@ func main() {
 	ip := os.Args[1]
 
 	// listen to incoming udp packets
-	pc, err := net.ListenPacket("udp", ip+":1053")
+	pc, err := net.ListenPacket("udp", ip+":162")
 	if err != nil {
 		log.Fatal(err)
 	}
