@@ -28,6 +28,28 @@ type IID struct {
 	Second_index int // corresponde até onde queremos as informacoes dos elementos
 }
 
+func newLists(n_elements int, elements []Tipo) Lists {
+	return Lists{
+		N_Elements: n_elements,
+		Elements:   elements,
+	}
+}
+
+func newTipo(data string, length int, value string) Tipo {
+	return Tipo{
+		Data_Type: data,
+		Length:    length,
+		Value:     value,
+	}
+}
+
+func newIID_List(n_elements int, elements []IID) IID_List {
+	return IID_List{
+		N_Elements: n_elements,
+		Elements:   elements,
+	}
+}
+
 func newIID_Tipo(length int, value IID) IID_Tipo {
 	return IID_Tipo{
 		Length: length, // pode ser 2,3 ou 4

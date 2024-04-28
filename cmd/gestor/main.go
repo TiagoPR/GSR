@@ -5,7 +5,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"gsr"
+	"gsr/messages"
+	"gsr/messages/types"
 	"log"
 	"net"
 	"os"
@@ -58,7 +59,7 @@ func send() {
 	enc := gob.NewEncoder(&network) // Will write to network.
 	// dec := gob.NewDecoder(&network) // Will read from network.
 
-	pdu := gsr.NewPDU('G', "27/04/2000", "1", nil, nil, nil)
+	pdu := messages.NewPDU('G', types.Lists{}, "1", nil, nil, nil)
 	err = enc.Encode(pdu)
 	if err != nil {
 		fmt.Printf("Couldn't encode data %v", err)

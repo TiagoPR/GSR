@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"gsr"
+	"gsr/messages"
 	"net"
 	"os"
 	"sync"
@@ -39,7 +39,7 @@ func readPDU(ser *net.UDPConn) {
 	}
 	fmt.Printf("Read a message from %v \n", remoteaddr)
 
-	receivedPDU := gsr.PDU{}
+	receivedPDU := messages.PDU{}
 
 	dec := gob.NewDecoder(bytes.NewReader(buf[:n])) // Will read from network.
 	err = dec.Decode(&receivedPDU)
