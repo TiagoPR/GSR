@@ -10,6 +10,9 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 )
 
 var agents []string
@@ -32,7 +35,82 @@ func listenAgents(pc net.PacketConn) {
 	}
 	println(agents[len(agents)-1])
 	//go serve(pc, addr, buf[:n])
+}
 
+func readPDU(ser *net.UDPConn) {
+	buf := make([]byte, 2048)
+	n, remoteaddr, err := ser.ReadFromUDP(buf)
+	if err != nil {
+		fmt.Printf("Some error %v", err)
+	}
+	fmt.Printf("Read a message from %v \n", remoteaddr)
+
+	receivedPDU := messages.PDU{}
+
+	dec := gob.NewDecoder(bytes.NewReader(buf[:n])) // Will read from network.
+	err = dec.Decode(&receivedPDU)
+	if err != nil {
+		// Error decoding message: unexpected EOF [ERROR HERE]
+		fmt.Printf("Error decoding message: %v\n", err)
+	}
+
+	// Print the received PDU.
+	receivedPDU.Print()
+}
+
+func getRequest() messages.PDU {
+	t := time.Now()
+	timestamp := t.Format("02:01:2006:15:04:05.000")
+	time := types.NewRequestTimestamp(timestamp)
+	fmt.Println(timestamp)
+	messageIdentifier := "gestor" + "\x00"
+	fmt.Println(messageIdentifier)
+
+	fmt.Println("Which IID?")
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Enter text: ")
+	text, err := reader.ReadString('\n')
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Remove newline character
+	text = strings.Replace(text, "\n", "", -1)
+
+	parts := strings.Split(text, ".")
+
+	var structure, object, firstIndex, secondIndex int
+
+	structure, _ = strconv.Atoi(parts[0])
+	object, _ = strconv.Atoi(parts[1])
+
+	if len(parts) > 2 {
+		firstIndex, _ = strconv.Atoi(parts[2])
+	}
+
+	if len(parts) > 3 {
+		secondIndex, _ = strconv.Atoi(parts[3])
+	}
+
+	fmt.Println("Structure: ", structure)
+	fmt.Println("Object: ", object)
+	fmt.Println("First Index: ", firstIndex)
+	fmt.Println("Second Index: ", secondIndex)
+
+	iid := types.IID{
+		Structure:    structure,
+		Objecto:      object,
+		First_index:  firstIndex,
+		Second_index: secondIndex,
+	}
+
+	iid_list := types.IID_List{
+		N_Elements: 1,
+		Elements:   []types.IID{iid},
+	}
+
+	pdu := messages.NewPDU("G", time, messageIdentifier, iid_list, types.Lists{}, types.Lists{})
+
+	return pdu
 }
 
 func send() {
@@ -46,7 +124,14 @@ func send() {
 	}
 	fmt.Println(line)
 
-	conn, err := net.Dial("udp", line)
+	line = strings.TrimSpace(line) // Trim the input string
+
+	raddr, err := net.ResolveUDPAddr("udp", line)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	conn, err := net.DialUDP("udp", nil, raddr)
 	if err != nil {
 		// Couldn't create connection dial udp: lookup udp/1053: unknown port [ERROR HERE]
 		fmt.Printf("Couldn't create connection %v", err)
@@ -59,7 +144,7 @@ func send() {
 	enc := gob.NewEncoder(&network) // Will write to network.
 	// dec := gob.NewDecoder(&network) // Will read from network.
 
-	pdu := messages.NewPDU('G', types.Lists{}, "1", nil, nil, nil)
+	pdu := getRequest()
 	err = enc.Encode(pdu)
 	if err != nil {
 		fmt.Printf("Couldn't encode data %v", err)
@@ -71,7 +156,7 @@ func send() {
 	if err != nil {
 		fmt.Printf("Couldn't send data %v", err)
 	}
-
+	readPDU(conn)
 }
 
 func main() {
@@ -90,6 +175,8 @@ func main() {
 	defer pc.Close()
 
 	go listenAgents(pc)
+
+	time.Sleep(5)
 
 	for {
 		send()

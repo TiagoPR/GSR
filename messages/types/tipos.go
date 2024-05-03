@@ -1,5 +1,7 @@
 package types
 
+import "fmt"
+
 type Lists struct {
 	N_Elements int // ao passar na funcao que transforma em string por /0 no final
 	Elements   []Tipo
@@ -13,7 +15,7 @@ type Tipo struct {
 
 type IID_List struct {
 	N_Elements int
-	Elements   []IID
+	Elements   []IID_Tipo
 }
 
 type IID_Tipo struct {
@@ -26,6 +28,31 @@ type IID struct {
 	Objecto      int
 	First_index  int // corresponde ao primeiro elemento que queremos
 	Second_index int // corresponde até onde queremos as informacoes dos elementos
+}
+
+func (t Tipo) Print() {
+	fmt.Println("Data Type", t.Data_Type)
+	fmt.Println("Length", t.Length)
+	fmt.Println("Value", t.Value)
+}
+
+func (i IID) IIDSerialize() string {
+	return fmt.Sprintf(`%d%d%d%d`, i.Structure, i.Objecto, i.First_index, i.Second_index)
+}
+
+func (t Tipo) TipoSerialize() string {
+	return fmt.Sprintf(`%s\0%d\0%s\0`, t.Data_Type, t.Length, t.Value)
+}
+
+func (l Lists) ListsSerialize() string {
+	line := fmt.Sprintf(`%d\0`, l.N_Elements)
+
+	// Iterate over the Tipo slice and serialize each Tipo
+	for _, t := range l.Elements {
+		line += t.TipoSerialize()
+	}
+
+	return line
 }
 
 func newLists(n_elements int, elements []Tipo) Lists {

@@ -7,7 +7,7 @@ import (
 
 type PDU struct {
 	Tag               string
-	Tipo              byte
+	Tipo              string
 	Timestamp         types.Tipo // gerada no envio da mensagem
 	MessageIdentifier string
 	Iid_list          types.IID_List
@@ -16,7 +16,7 @@ type PDU struct {
 }
 
 // constructor of pdu with tag default value
-func NewPDU(tipo byte, timestamp types.Tipo, messageIdentifier string, iid_list types.IID_List, value_list types.Lists, error_list types.Lists) PDU {
+func NewPDU(tipo string, timestamp types.Tipo, messageIdentifier string, iid_list types.IID_List, value_list types.Lists, error_list types.Lists) PDU {
 	pdu := PDU{}
 	pdu.Tag = "kdk847ufh84jg87g\\0"
 	pdu.Tipo = tipo
