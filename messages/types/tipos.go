@@ -1,6 +1,10 @@
 package types
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
 
 type Lists struct {
 	N_Elements int // ao passar na funcao que transforma em string por /0 no final
@@ -19,8 +23,9 @@ type IID_List struct {
 }
 
 type IID_Tipo struct {
-	Length int
-	Value  IID
+	Data_Type string
+	Length    int
+	Value     IID
 }
 
 type IID struct {
@@ -34,6 +39,21 @@ func (t Tipo) Print() {
 	fmt.Println("Data Type", t.Data_Type)
 	fmt.Println("Length", t.Length)
 	fmt.Println("Value", t.Value)
+}
+
+func (l IID_List) IIDListSerialize() string {
+	line := fmt.Sprintf(`%d\0`, l.N_Elements)
+
+	// Iterate over the Tipo slice and serialize each Tipo
+	for _, t := range l.Elements {
+		line += t.TipoIIDSerialize()
+	}
+
+	return line
+}
+
+func (t IID_Tipo) TipoIIDSerialize() string {
+	return fmt.Sprintf(`%s\0%d\0%s\0`, t.Data_Type, t.Length, t.Value.IIDSerialize())
 }
 
 func (i IID) IIDSerialize() string {
@@ -70,7 +90,7 @@ func newTipo(data string, length int, value string) Tipo {
 	}
 }
 
-func newIID_List(n_elements int, elements []IID) IID_List {
+func newIID_List(n_elements int, elements []IID_Tipo) IID_List {
 	return IID_List{
 		N_Elements: n_elements,
 		Elements:   elements,
@@ -79,8 +99,9 @@ func newIID_List(n_elements int, elements []IID) IID_List {
 
 func newIID_Tipo(length int, value IID) IID_Tipo {
 	return IID_Tipo{
-		Length: length, // pode ser 2,3 ou 4
-		Value:  value,
+		Data_Type: "D",
+		Length:    length, // pode ser 2,3 ou 4
+		Value:     value,
 	}
 }
 
