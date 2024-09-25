@@ -1,10 +1,7 @@
 package main
 
 import (
-	"bytes"
-	"encoding/gob"
 	"fmt"
-	"gsr/messages"
 	"net"
 	"os"
 	"sync"
@@ -39,17 +36,9 @@ func readPDU(ser *net.UDPConn) {
 	}
 	fmt.Printf("Read a message from %v \n", remoteaddr)
 
-	receivedPDU := messages.PDU{}
-
-	dec := gob.NewDecoder(bytes.NewReader(buf[:n])) // Will read from network.
-	err = dec.Decode(&receivedPDU)
-	if err != nil {
-		// Error decoding message: unexpected EOF [ERROR HERE]
-		fmt.Printf("Error decoding message: %v\n", err)
-	}
-
-	// Print the received PDU.
-	receivedPDU.Print()
+	// Print the received serialized PDU string
+	fmt.Println("Received serialized PDU from manager:")
+	fmt.Println(string(buf[:n]))
 }
 
 func main() {

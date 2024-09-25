@@ -7,7 +7,7 @@ import (
 
 type PDU struct {
 	Tag               string
-	Tipo              string
+	Tipo              byte
 	Timestamp         types.Tipo // gerada no envio da mensagem
 	MessageIdentifier string
 	Iid_list          types.IID_List
@@ -15,10 +15,14 @@ type PDU struct {
 	Error_list        types.Lists
 }
 
+func (p PDU) SerializePDU() string {
+	return fmt.Sprintf(`%s\0%c\0%s%s\0%s%s%s`, p.Tag, p.Tipo, p.Timestamp.TipoSerialize(), p.MessageIdentifier, p.Iid_list.IIDListSerialize(), p.Value_list.ListsSerialize(), p.Error_list.ListsSerialize())
+}
+
 // constructor of pdu with tag default value
-func NewPDU(tipo string, timestamp types.Tipo, messageIdentifier string, iid_list types.IID_List, value_list types.Lists, error_list types.Lists) PDU {
+func NewPDU(tipo byte, timestamp types.Tipo, messageIdentifier string, iid_list types.IID_List, value_list types.Lists, error_list types.Lists) PDU {
 	pdu := PDU{}
-	pdu.Tag = "kdk847ufh84jg87g\\0"
+	pdu.Tag = "kdk847ufh84jg87g"
 	pdu.Tipo = tipo
 	pdu.Timestamp = timestamp
 	pdu.MessageIdentifier = messageIdentifier

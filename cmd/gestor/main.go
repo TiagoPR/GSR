@@ -59,11 +59,9 @@ func readPDU(ser *net.UDPConn) {
 }
 
 func getRequest() messages.PDU {
-	t := time.Now()
-	timestamp := t.Format("02:01:2006:15:04:05.000")
-	time := types.NewRequestTimestamp(timestamp)
-	fmt.Println(timestamp)
-	messageIdentifier := "gestor" + "\x00"
+	time := types.NewRequestTimestamp()
+	fmt.Println(time)
+	messageIdentifier := "gestor"
 	fmt.Println(messageIdentifier)
 
 	fmt.Println("Which IID?")
@@ -96,19 +94,11 @@ func getRequest() messages.PDU {
 	fmt.Println("First Index: ", firstIndex)
 	fmt.Println("Second Index: ", secondIndex)
 
-	iid := types.IID{
-		Structure:    structure,
-		Objecto:      object,
-		First_index:  firstIndex,
-		Second_index: secondIndex,
-	}
+	iid := types.NewIID(structure, object, firstIndex, secondIndex)
+	iid_tipo := types.NewIID_Tipo(4, iid)
+	iid_list := types.NewIID_List(1, []types.IID_Tipo{iid_tipo})
 
-	iid_list := types.IID_List{
-		N_Elements: 1,
-		Elements:   []types.IID{iid},
-	}
-
-	pdu := messages.NewPDU("G", time, messageIdentifier, iid_list, types.Lists{}, types.Lists{})
+	pdu := messages.NewPDU('G', time, messageIdentifier, iid_list, types.Lists{}, types.Lists{})
 
 	return pdu
 }
@@ -140,22 +130,16 @@ func send() {
 
 	defer conn.Close()
 
-	var network bytes.Buffer        // Stand-in for a network connection
-	enc := gob.NewEncoder(&network) // Will write to network.
-	// dec := gob.NewDecoder(&network) // Will read from network.
-
 	pdu := getRequest()
-	err = enc.Encode(pdu)
+	serializedPDU := pdu.SerializePDU()
+
+	_, err = conn.Write([]byte(serializedPDU))
 	if err != nil {
-		fmt.Printf("Couldn't encode data %v", err)
+		fmt.Println("Error sending data:", err)
+		return
 	}
-	encodedData := network.Bytes() // Get the encoded data slice
 
 	fmt.Println("Sending PDU")
-	_, err = conn.Write(encodedData[:network.Len()]) // Send the encoded data
-	if err != nil {
-		fmt.Printf("Couldn't send data %v", err)
-	}
 	readPDU(conn)
 }
 

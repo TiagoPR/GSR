@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Lists struct {
@@ -12,7 +13,7 @@ type Lists struct {
 }
 
 type Tipo struct {
-	Data_Type string // pode ser integer(I), timestamp(T), string(S)
+	Data_Type byte // pode ser integer(I), timestamp(T), string(S)
 	Length    int
 	Value     string
 }
@@ -23,7 +24,7 @@ type IID_List struct {
 }
 
 type IID_Tipo struct {
-	Data_Type string
+	Data_Type byte // vai ser sempre IID(D)
 	Length    int
 	Value     IID
 }
@@ -53,7 +54,7 @@ func (l IID_List) IIDListSerialize() string {
 }
 
 func (t IID_Tipo) TipoIIDSerialize() string {
-	return fmt.Sprintf(`%s\0%d\0%s\0`, t.Data_Type, t.Length, t.Value.IIDSerialize())
+	return fmt.Sprintf(`%c\0%d\0%s\0`, t.Data_Type, t.Length, t.Value.IIDSerialize())
 }
 
 func (i IID) IIDSerialize() string {
@@ -61,7 +62,19 @@ func (i IID) IIDSerialize() string {
 }
 
 func (t Tipo) TipoSerialize() string {
-	return fmt.Sprintf(`%s\0%d\0%s\0`, t.Data_Type, t.Length, t.Value)
+	return fmt.Sprintf(`%c\0%d\0%s\0`, t.Data_Type, t.Length, t.Value)
+}
+
+func DeserializeTipo(serialized string) Tipo {
+	elements := strings.Split(serialized, `\0`)
+	data, _ := strconv.Atoi(elements[0])
+	byte := byte(data)
+	length, _ := strconv.Atoi(elements[1])
+	return Tipo{
+		Data_Type: byte,
+		Length:    length,
+		Value:     elements[2],
+	}
 }
 
 func (l Lists) ListsSerialize() string {
@@ -75,14 +88,30 @@ func (l Lists) ListsSerialize() string {
 	return line
 }
 
-func newLists(n_elements int, elements []Tipo) Lists {
+func DeserializeLists(serialized string) Lists {
+	elements := strings.Split(serialized, `\0`)
+	nElements, _ := strconv.Atoi(elements[0])
+
+	var tipos []Tipo
+	for i := 1; i < len(elements); i += 3 {
+		data_type, _ := strconv.Atoi(elements[i])
+		byte := byte(data_type)
+		length, _ := strconv.Atoi(elements[i+1])
+		value := elements[i+2]
+		tipos = append(tipos, Tipo{Data_Type: byte, Length: length, Value: value})
+	}
+
+	return Lists{N_Elements: nElements, Elements: tipos}
+}
+
+func NewLists(n_elements int, elements []Tipo) Lists {
 	return Lists{
 		N_Elements: n_elements,
 		Elements:   elements,
 	}
 }
 
-func newTipo(data string, length int, value string) Tipo {
+func NewTipo(data byte, length int, value string) Tipo {
 	return Tipo{
 		Data_Type: data,
 		Length:    length,
@@ -90,22 +119,22 @@ func newTipo(data string, length int, value string) Tipo {
 	}
 }
 
-func newIID_List(n_elements int, elements []IID_Tipo) IID_List {
+func NewIID_List(n_elements int, elements []IID_Tipo) IID_List {
 	return IID_List{
 		N_Elements: n_elements,
 		Elements:   elements,
 	}
 }
 
-func newIID_Tipo(length int, value IID) IID_Tipo {
+func NewIID_Tipo(length int, value IID) IID_Tipo {
 	return IID_Tipo{
-		Data_Type: "D",
+		Data_Type: 'D',
 		Length:    length, // pode ser 2,3 ou 4
 		Value:     value,
 	}
 }
 
-func newIID(structure int, objeto int, first int, second int) IID {
+func NewIID(structure int, objeto int, first int, second int) IID {
 	return IID{
 		Structure:    structure,
 		Objecto:      objeto,
@@ -115,17 +144,19 @@ func newIID(structure int, objeto int, first int, second int) IID {
 }
 
 // Timestamps
-func NewRequestTimestamp(value string) Tipo {
+func NewRequestTimestamp() Tipo {
+	t := time.Now()
+	timestamp := t.Format("02:01:2006:15:04:05.000")
 	return Tipo{
-		Data_Type: "T",
+		Data_Type: 'T',
 		Length:    7,
-		Value:     value,
+		Value:     timestamp,
 	}
 }
 
 func NewInfoTimestamp(value string) Tipo {
 	return Tipo{
-		Data_Type: "T",
+		Data_Type: 'T',
 		Length:    5,
 		Value:     value,
 	}
