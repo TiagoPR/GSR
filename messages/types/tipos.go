@@ -53,12 +53,52 @@ func (l IID_List) IIDListSerialize() string {
 	return line
 }
 
+func DeserializeIID_List(serialized string) IID_List {
+	elements := strings.SplitN(serialized, `\0`, 2)
+	nElements, _ := strconv.Atoi(elements[0])
+	var iidTypes []IID_Tipo
+	remaining := elements[1]
+	for i := 0; i < nElements; i++ {
+		iidType := DeserializeIID_Tipo(remaining)
+		iidTypes = append(iidTypes, iidType)
+		// Move to the next IID_Tipo
+		parts := strings.SplitN(remaining, `\0`, 4)
+		if len(parts) < 4 {
+			break
+		}
+		remaining = strings.Join(parts[3:], `\0`)
+	}
+	return IID_List{
+		N_Elements: nElements,
+		Elements:   iidTypes,
+	}
+}
+
 func (t IID_Tipo) TipoIIDSerialize() string {
 	return fmt.Sprintf(`%c\0%d\0%s\0`, t.Data_Type, t.Length, t.Value.IIDSerialize())
 }
 
+func DeserializeIID_Tipo(serialized string) IID_Tipo {
+	elements := strings.Split(serialized, `\0`)
+	length, _ := strconv.Atoi(elements[1])
+	return IID_Tipo{
+		Data_Type: elements[0][0],
+		Length:    length,
+		Value:     DeserializeIID(elements[2]),
+	}
+}
+
 func (i IID) IIDSerialize() string {
 	return fmt.Sprintf(`%d%d%d%d`, i.Structure, i.Objecto, i.First_index, i.Second_index)
+}
+
+func DeserializeIID(serialized string) IID {
+	return IID{
+		Structure:    int(serialized[0] - '0'),
+		Objecto:      int(serialized[1] - '0'),
+		First_index:  int(serialized[2] - '0'),
+		Second_index: int(serialized[3] - '0'),
+	}
 }
 
 func (t Tipo) TipoSerialize() string {
