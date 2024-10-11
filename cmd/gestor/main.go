@@ -2,8 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
-	"encoding/gob"
 	"fmt"
 	"gsr/messages"
 	"gsr/messages/types"
@@ -37,7 +35,7 @@ func listenAgents(pc net.PacketConn) {
 	//go serve(pc, addr, buf[:n])
 }
 
-func readPDU(ser *net.UDPConn) {
+func readPDU(ser *net.UDPConn) messages.PDU {
 	buf := make([]byte, 2048)
 	n, remoteaddr, err := ser.ReadFromUDP(buf)
 	if err != nil {
@@ -45,17 +43,14 @@ func readPDU(ser *net.UDPConn) {
 	}
 	fmt.Printf("Read a message from %v \n", remoteaddr)
 
-	receivedPDU := messages.PDU{}
-
-	dec := gob.NewDecoder(bytes.NewReader(buf[:n])) // Will read from network.
-	err = dec.Decode(&receivedPDU)
-	if err != nil {
-		// Error decoding message: unexpected EOF [ERROR HERE]
-		fmt.Printf("Error decoding message: %v\n", err)
-	}
-
-	// Print the received PDU.
-	receivedPDU.Print()
+	// Print the received serialized PDU string
+	fmt.Println("Received serialized PDU from manager:")
+	serializedPdu := string(buf[:n])
+	fmt.Println(serializedPdu)
+	// Deserializing not working here!
+	// pdu := messages.DeserializePDU(serializedPdu)
+	// return pdu
+	return messages.PDU{}
 }
 
 func getRequest() messages.PDU {
@@ -140,7 +135,8 @@ func send() {
 	}
 
 	fmt.Println("Sending PDU")
-	readPDU(conn)
+	receivedPDU := readPDU(conn)
+	print(receivedPDU.Tag)
 }
 
 func main() {

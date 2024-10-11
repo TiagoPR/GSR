@@ -3,8 +3,11 @@ package main
 import (
 	"fmt"
 	"gsr/messages"
+	"gsr/messages/types"
 	"net"
 	"os"
+	"reflect"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -57,10 +60,103 @@ var mockLMIB = map[int]interface{}{
 	},
 }
 
-func sendResponse(conn *net.UDPConn, addr *net.UDPAddr) {
-	_, err := conn.WriteToUDP([]byte("From Agent: Hello I got your message "), addr)
+func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr) {
+	responsePDU := receivedPDU
+	var valueElements []types.Tipo
+
+	// Process each OID in the IIDList
+	for _, iid := range receivedPDU.Iid_list.Elements {
+		structure := iid.Value.Structure
+		object := iid.Value.Objecto
+		firstIndex := iid.Value.First_index - 1 // Adjust for 0-based index
+		secondIndex := -1                       // Default to -1 if not provided
+
+		// Check if second index is provided
+		if iid.Value.Second_index != 0 {
+			secondIndex = iid.Value.Second_index - 1 // Adjust for 0-based index
+		}
+
+		fmt.Printf("\nProcessing OID: %d.%d.%d", structure, object, firstIndex+1)
+		if secondIndex != -1 {
+			fmt.Printf(".%d", secondIndex+1)
+		}
+		fmt.Println()
+
+		if group, ok := mockLMIB[structure].(map[int]interface{}); ok {
+			if list, ok := group[object]; ok {
+				// Use reflection to handle different types of slices
+				listValue := reflect.ValueOf(list)
+				if listValue.Kind() != reflect.Slice {
+					fmt.Printf("Object %d is not a list in structure %d\n", object, structure)
+					continue
+				}
+
+				start := firstIndex
+				end := listValue.Len()
+				if secondIndex != -1 && secondIndex < end {
+					end = secondIndex + 1
+				}
+
+				if start < 0 || start >= listValue.Len() {
+					fmt.Printf("Invalid index range. List length: %d, Requested range: %d to %d\n", listValue.Len(), start, end-1)
+					continue
+				}
+
+				fmt.Println("Retrieved values:")
+				for i := start; i < end && i < listValue.Len(); i++ {
+					value := listValue.Index(i).Interface()
+					fmt.Printf("Index %d: %v (Type: %T)\n", i+1, value, value)
+				}
+
+				for j := start; j < end && j < listValue.Len(); j++ {
+					value := listValue.Index(j).Interface()
+					var tipo types.Tipo
+
+					switch v := value.(type) {
+					case int:
+						tipo = types.Tipo{
+							Data_Type: 'I',
+							Length:    4, // Assuming 32-bit integer
+							Value:     strconv.Itoa(v),
+						}
+					case string:
+						tipo = types.Tipo{
+							Data_Type: 'S',
+							Length:    len(v),
+							Value:     v,
+						}
+					case time.Time:
+						tipo = types.Tipo{
+							Data_Type: 'T',
+							Length:    8, // Assuming 64-bit timestamp
+							Value:     v.Format(time.RFC3339),
+						}
+					default:
+						fmt.Printf("Unsupported type for value: %v\n", v)
+						continue
+					}
+
+					valueElements = append(valueElements, tipo)
+				}
+			} else {
+				fmt.Printf("Object %d doesn't exist in structure %d\n", object, structure)
+			}
+		} else {
+			fmt.Printf("Structure %d doesn't exist in mockLMIB\n", structure)
+		}
+	}
+
+	responsePDU.Timestamp = types.NewRequestTimestamp()
+	responsePDU.Tipo = 'R'
+	responsePDU.MessageIdentifier = "agente"
+	responsePDU.Value_list = types.NewLists(len(valueElements), valueElements)
+
+	serializedPDU := responsePDU.SerializePDU()
+	_, err := conn.WriteToUDP([]byte(serializedPDU), addr)
 	if err != nil {
-		fmt.Printf("Couldn't send response %v", err)
+		fmt.Printf("Error sending response: %v\n", err)
+	} else {
+		fmt.Println("Response PDU sent successfully")
 	}
 }
 
@@ -84,9 +180,13 @@ func readPDU(ser *net.UDPConn) {
 	serializedPdu := string(buf[:n])
 	fmt.Println(serializedPdu)
 	pdu := messages.DeserializePDU(serializedPdu)
-	oid := []int{pdu.Iid_list.Elements[0].Value.Structure, pdu.Iid_list.Elements[0].Value.Objecto, pdu.Iid_list.Elements[0].Value.First_index - 1}
-	value := mockLMIB[oid[0]].(map[int]interface{})[oid[1]].([]int)[oid[2]]
-	print("Value: ", value)
+	fmt.Println(pdu)
+
+	if pdu.Tipo == 'G' {
+		sendResponse(pdu, ser, remoteaddr)
+	}
+
+	readPDU(ser)
 }
 
 func main() {
