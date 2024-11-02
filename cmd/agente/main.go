@@ -61,33 +61,40 @@ var mockLMIB = map[int]interface{}{
 }
 
 func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr) {
-	responsePDU := receivedPDU
+	// Print the received PDU for debugging
+	fmt.Printf("Received PDU IID list: %+v\n", receivedPDU.Iid_list)
+
+	// Create response PDU
+	responsePDU := messages.PDU{
+		Tag:               receivedPDU.Tag,
+		Tipo:              'R',
+		Timestamp:         types.NewRequestTimestamp(),
+		MessageIdentifier: "agente",
+		Iid_list:          receivedPDU.Iid_list,
+	}
+
 	var valueElements []types.Tipo
 
 	// Process each OID in the IIDList
 	for _, iid := range receivedPDU.Iid_list.Elements {
 		structure := iid.Value.Structure
 		object := iid.Value.Objecto
-		firstIndex := iid.Value.First_index - 1 // Adjust for 0-based index
-		secondIndex := -1                       // Default to -1 if not provided
+		firstIndex := iid.Value.First_index - 1
+		secondIndex := -1
 
-		// Check if second index is provided
 		if iid.Value.Second_index != 0 {
-			secondIndex = iid.Value.Second_index - 1 // Adjust for 0-based index
+			secondIndex = iid.Value.Second_index - 1
 		}
-
-		fmt.Printf("\nProcessing OID: %d.%d.%d", structure, object, firstIndex+1)
-		if secondIndex != -1 {
-			fmt.Printf(".%d", secondIndex+1)
-		}
-		fmt.Println()
 
 		if group, ok := mockLMIB[structure].(map[int]interface{}); ok {
+			fmt.Printf("Found structure %d in mockLMIB\n", structure)
+
 			if list, ok := group[object]; ok {
-				// Use reflection to handle different types of slices
+				fmt.Printf("Found object %d in structure\n", object)
+
 				listValue := reflect.ValueOf(list)
 				if listValue.Kind() != reflect.Slice {
-					fmt.Printf("Object %d is not a list in structure %d\n", object, structure)
+					fmt.Printf("Warning: Object is not a slice\n")
 					continue
 				}
 
@@ -97,61 +104,68 @@ func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr
 					end = secondIndex + 1
 				}
 
-				if start < 0 || start >= listValue.Len() {
-					fmt.Printf("Invalid index range. List length: %d, Requested range: %d to %d\n", listValue.Len(), start, end-1)
-					continue
-				}
+				fmt.Printf("Processing range: %d to %d (list length: %d)\n",
+					start+1, end, listValue.Len())
 
-				fmt.Println("Retrieved values:")
-				for i := start; i < end && i < listValue.Len(); i++ {
-					value := listValue.Index(i).Interface()
-					fmt.Printf("Index %d: %v (Type: %T)\n", i+1, value, value)
-				}
+				if start >= 0 && start < listValue.Len() {
+					for j := start; j < end && j < listValue.Len(); j++ {
+						value := listValue.Index(j).Interface()
+						fmt.Printf("Processing value at index %d: %v\n", j+1, value)
 
-				for j := start; j < end && j < listValue.Len(); j++ {
-					value := listValue.Index(j).Interface()
-					var tipo types.Tipo
-
-					switch v := value.(type) {
-					case int:
-						tipo = types.Tipo{
-							Data_Type: 'I',
-							Length:    4, // Assuming 32-bit integer
-							Value:     strconv.Itoa(v),
+						var tipo types.Tipo
+						switch v := value.(type) {
+						case int:
+							tipo = types.Tipo{
+								Data_Type: 'I',
+								Length:    1,
+								Value:     strconv.Itoa(v),
+							}
+						case string:
+							tipo = types.Tipo{
+								Data_Type: 'S',
+								Length:    1,
+								Value:     v,
+							}
+						case time.Time:
+							tipo = types.Tipo{
+								Data_Type: 'T',
+								Length:    8,
+								Value:     v.Format(time.RFC3339),
+							}
+						default:
+							fmt.Printf("Warning: Unsupported type %T\n", v)
+							continue
 						}
-					case string:
-						tipo = types.Tipo{
-							Data_Type: 'S',
-							Length:    len(v),
-							Value:     v,
-						}
-					case time.Time:
-						tipo = types.Tipo{
-							Data_Type: 'T',
-							Length:    8, // Assuming 64-bit timestamp
-							Value:     v.Format(time.RFC3339),
-						}
-					default:
-						fmt.Printf("Unsupported type for value: %v\n", v)
-						continue
+						valueElements = append(valueElements, tipo)
+						fmt.Printf("Added value to elements. Current count: %d\n",
+							len(valueElements))
 					}
-
-					valueElements = append(valueElements, tipo)
+				} else {
+					fmt.Printf("Warning: Start index %d out of range\n", start+1)
 				}
 			} else {
-				fmt.Printf("Object %d doesn't exist in structure %d\n", object, structure)
+				fmt.Printf("Warning: Object %d not found in structure\n", object)
 			}
 		} else {
-			fmt.Printf("Structure %d doesn't exist in mockLMIB\n", structure)
+			fmt.Printf("Warning: Structure %d not found in mockLMIB\n", structure)
 		}
 	}
 
-	responsePDU.Timestamp = types.NewRequestTimestamp()
-	responsePDU.Tipo = 'R'
-	responsePDU.MessageIdentifier = "agente"
-	responsePDU.Value_list = types.NewLists(len(valueElements), valueElements)
+	// Set Value_list and Error_list
+	responsePDU.Value_list = types.Lists{
+		N_Elements: len(valueElements),
+		Elements:   valueElements,
+	}
 
+	responsePDU.Error_list = types.Lists{
+		N_Elements: 0,
+		Elements:   []types.Tipo{},
+	}
+
+	// Serialize and send
 	serializedPDU := responsePDU.SerializePDU()
+	fmt.Printf("Serialized PDU: %s\n", serializedPDU)
+
 	_, err := conn.WriteToUDP([]byte(serializedPDU), addr)
 	if err != nil {
 		fmt.Printf("Error sending response: %v\n", err)
@@ -180,7 +194,7 @@ func readPDU(ser *net.UDPConn) {
 	serializedPdu := string(buf[:n])
 	fmt.Println(serializedPdu)
 	pdu := messages.DeserializePDU(serializedPdu)
-	fmt.Println(pdu)
+	pdu.Print()
 
 	if pdu.Tipo == 'G' {
 		sendResponse(pdu, ser, remoteaddr)

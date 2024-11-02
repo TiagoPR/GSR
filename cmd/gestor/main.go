@@ -44,13 +44,12 @@ func readPDU(ser *net.UDPConn) messages.PDU {
 	fmt.Printf("Read a message from %v \n", remoteaddr)
 
 	// Print the received serialized PDU string
-	fmt.Println("Received serialized PDU from manager:")
+	fmt.Println("Received serialized PDU from agent:")
 	serializedPdu := string(buf[:n])
 	fmt.Println(serializedPdu)
 	// Deserializing not working here!
-	// pdu := messages.DeserializePDU(serializedPdu)
-	// return pdu
-	return messages.PDU{}
+	pdu := messages.DeserializePDU(serializedPdu)
+	return pdu
 }
 
 func getRequest() messages.PDU {
@@ -136,7 +135,7 @@ func send() {
 
 	fmt.Println("Sending PDU")
 	receivedPDU := readPDU(conn)
-	print(receivedPDU.Tag)
+	receivedPDU.Print()
 }
 
 func main() {
