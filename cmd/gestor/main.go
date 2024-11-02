@@ -15,14 +15,6 @@ import (
 
 var agents []string
 
-func serve(pc net.PacketConn, addr net.Addr, buf []byte) {
-	// 0 - 1: ID
-	// 2: QR(1): Opcode(4)
-	buf[2] |= 0x80 // Set QR bit
-
-	pc.WriteTo(buf, addr)
-}
-
 func listenAgents(pc net.PacketConn) {
 	buf := make([]byte, 1024)
 	fmt.Println("Listening for agent's")
@@ -32,7 +24,6 @@ func listenAgents(pc net.PacketConn) {
 		fmt.Println("Couldn't read for agent's")
 	}
 	println(agents[len(agents)-1])
-	//go serve(pc, addr, buf[:n])
 }
 
 func readPDU(ser *net.UDPConn) messages.PDU {
@@ -47,7 +38,7 @@ func readPDU(ser *net.UDPConn) messages.PDU {
 	fmt.Println("Received serialized PDU from agent:")
 	serializedPdu := string(buf[:n])
 	fmt.Println(serializedPdu)
-	// Deserializing not working here!
+
 	pdu := messages.DeserializePDU(serializedPdu)
 	return pdu
 }
@@ -58,41 +49,58 @@ func getRequest() messages.PDU {
 	messageIdentifier := "gestor"
 	fmt.Println(messageIdentifier)
 
-	fmt.Println("Which IID?")
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter text: ")
-	text, err := reader.ReadString('\n')
-	if err != nil {
-		log.Fatal(err)
+	fmt.Println("How many IID do you want to send?")
+	nIIDS, _ := reader.ReadString('\n')
+	nIIDS = strings.TrimSpace(nIIDS)
+	number, _ := strconv.Atoi(nIIDS)
+
+	// Initialize the list as an empty slice
+	iid_list := []types.IID_Tipo{}
+
+	for i := 0; i < number; i++ {
+		fmt.Println("Which IID?")
+		text, err := reader.ReadString('\n')
+		if err != nil {
+			log.Fatal(err)
+		}
+		// Remove newline character
+		text = strings.TrimSpace(text)
+
+		parts := strings.Split(text, ".")
+
+		var structure, object, firstIndex, secondIndex int
+
+		structure, _ = strconv.Atoi(parts[0])
+		object, _ = strconv.Atoi(parts[1])
+
+		if len(parts) > 2 {
+			firstIndex, _ = strconv.Atoi(parts[2])
+		}
+
+		if len(parts) > 3 {
+			secondIndex, _ = strconv.Atoi(parts[3])
+		}
+
+		fmt.Println("Structure: ", structure)
+		fmt.Println("Object: ", object)
+		fmt.Println("First Index: ", firstIndex)
+		fmt.Println("Second Index: ", secondIndex)
+
+		// Create IID and IID_Tipo objects
+		iid := types.NewIID(structure, object, firstIndex, secondIndex)
+		iid_tipo := types.NewIID_Tipo(len(parts), iid)
+
+		// Append the new IID_Tipo to the slice
+		iid_list = append(iid_list, iid_tipo)
 	}
-	// Remove newline character
-	text = strings.Replace(text, "\n", "", -1)
 
-	parts := strings.Split(text, ".")
+	// If needed, create a new IID_List from the updated slice
+	finalList := types.NewIID_List(len(iid_list), iid_list)
 
-	var structure, object, firstIndex, secondIndex int
-
-	structure, _ = strconv.Atoi(parts[0])
-	object, _ = strconv.Atoi(parts[1])
-
-	if len(parts) > 2 {
-		firstIndex, _ = strconv.Atoi(parts[2])
-	}
-
-	if len(parts) > 3 {
-		secondIndex, _ = strconv.Atoi(parts[3])
-	}
-
-	fmt.Println("Structure: ", structure)
-	fmt.Println("Object: ", object)
-	fmt.Println("First Index: ", firstIndex)
-	fmt.Println("Second Index: ", secondIndex)
-
-	iid := types.NewIID(structure, object, firstIndex, secondIndex)
-	iid_tipo := types.NewIID_Tipo(4, iid)
-	iid_list := types.NewIID_List(1, []types.IID_Tipo{iid_tipo})
-
-	pdu := messages.NewPDU('G', time, messageIdentifier, iid_list, types.Lists{}, types.Lists{})
+	pdu := messages.NewPDU('G', time, messageIdentifier, finalList, types.Lists{}, types.Lists{})
+	fmt.Println("Get Request PDU:")
+	pdu.Print()
 
 	return pdu
 }
