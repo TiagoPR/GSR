@@ -3,6 +3,7 @@ package messages
 import (
 	"fmt"
 	"gsr/messages/types"
+	"strconv"
 	"strings"
 )
 
@@ -22,30 +23,53 @@ func (p PDU) SerializePDU() string {
 
 func DeserializePDU(serialized string) PDU {
 	elements := strings.SplitN(serialized, `\0`, 7)
-
 	pdu := PDU{}
 	pdu.Tag = elements[0]
 	pdu.Tipo = elements[1][0]
 	pdu.Timestamp = types.DeserializeTipo(elements[2] + `\0` + elements[3] + `\0` + elements[4])
 	pdu.MessageIdentifier = elements[5]
-
 	remaining := elements[6]
 
+	// First get number of IID elements
+	parts := strings.SplitN(remaining, `\0`, 2)
+	nIIDElements, _ := strconv.Atoi(parts[0])
+
+	if len(parts) < 2 {
+		return pdu
+	}
+
+	remaining = parts[1]
+
+	// Calculate where IID_List ends based on number of elements
+	iidParts := make([]string, 0)
+	iidParts = append(iidParts, strconv.Itoa(nIIDElements))
+
+	currentParts := strings.SplitN(remaining, `\0`, 4) // Data_Type, Length, Value, rest
+	if len(currentParts) >= 3 {
+		iidParts = append(iidParts, currentParts[0], currentParts[1], currentParts[2])
+		if len(currentParts) > 3 {
+			remaining = currentParts[3]
+		} else {
+			remaining = ""
+		}
+	}
+
 	// Deserialize IID_List
-	iidListParts := strings.SplitN(remaining, `\0`, 2)
-	pdu.Iid_list = types.DeserializeIID_List(iidListParts[0] + `\0` + iidListParts[1])
+	pdu.Iid_list = types.DeserializeIID_List(strings.Join(iidParts, `\0`))
 
-	// Move to Value_list
-	valueListStart := strings.Index(iidListParts[1], `\00\0`) + 3
-	remaining = iidListParts[1][valueListStart:]
+	// Split remaining into Value_list and Error_list
+	valueParts := strings.Split(remaining, `\00\0`)
 
-	// Deserialize Value_list
-	valueListParts := strings.SplitN(remaining, `\00\0`, 2)
-	pdu.Value_list = types.DeserializeLists(valueListParts[0])
+	// Process Value_list if it exists
+	if len(valueParts) > 0 && valueParts[0] != "" {
+		pdu.Value_list = types.DeserializeLists(valueParts[0])
+	} else {
+		pdu.Value_list = types.Lists{N_Elements: 0, Elements: []types.Tipo{}}
+	}
 
-	// Deserialize Error_list
-	if len(valueListParts) > 1 {
-		pdu.Error_list = types.DeserializeLists(valueListParts[1])
+	// Process Error_list if it exists
+	if len(valueParts) > 1 {
+		pdu.Error_list = types.DeserializeLists(valueParts[1])
 	} else {
 		pdu.Error_list = types.Lists{N_Elements: 0, Elements: []types.Tipo{}}
 	}
@@ -67,12 +91,23 @@ func NewPDU(tipo byte, timestamp types.Tipo, messageIdentifier string, iid_list 
 	return pdu
 }
 
+// PDU printer
 func (p PDU) Print() {
-	fmt.Println("Tag:", p.Tag)
-	fmt.Println("Tipo:", p.Tipo)
-	fmt.Println("Timestamp:", p.Timestamp)
-	fmt.Println("Message Identifier:", p.MessageIdentifier)
-	fmt.Println("Iid List:", p.Iid_list)
-	fmt.Println("Value List:", p.Value_list)
-	fmt.Println("Error List:", p.Error_list)
+	fmt.Println("PDU {")
+	fmt.Printf("  Tag: %s\n", p.Tag)
+	fmt.Printf("  Type: %c\n", p.Tipo)
+	fmt.Printf("  Timestamp: ")
+	p.Timestamp.Print()
+	fmt.Printf("\n")
+	fmt.Printf("  Message Identifier: %s\n", p.MessageIdentifier)
+	fmt.Printf("  IID List: ")
+	p.Iid_list.Print()
+	fmt.Printf("\n")
+	fmt.Printf("  Value List: ")
+	p.Value_list.Print()
+	fmt.Printf("\n")
+	fmt.Printf("  Error List: ")
+	p.Error_list.Print()
+	fmt.Printf("\n")
+	fmt.Println("}")
 }

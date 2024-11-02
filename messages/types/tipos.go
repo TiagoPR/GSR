@@ -36,10 +36,59 @@ type IID struct {
 	Second_index int // corresponde até onde queremos as informacoes dos elementos
 }
 
+// Tipo printer
 func (t Tipo) Print() {
-	fmt.Println("Data Type", t.Data_Type)
-	fmt.Println("Length", t.Length)
-	fmt.Println("Value", t.Value)
+	fmt.Printf("{Type: %c, Length: %d, Value: %s}", t.Data_Type, t.Length, t.Value)
+}
+
+// IID_List printer
+func (il IID_List) Print() {
+	if il.N_Elements == 0 {
+		fmt.Printf("[]")
+		return
+	}
+	fmt.Printf("[\n")
+	for i, elem := range il.Elements {
+		fmt.Printf("    ") // Indent
+		elem.Print()
+		if i < len(il.Elements)-1 {
+			fmt.Printf(",\n")
+		}
+	}
+	fmt.Printf("\n  ]")
+}
+
+// IID_Tipo printer
+func (it IID_Tipo) Print() {
+	fmt.Printf("{Type: %c, Length: %d, Value: ", it.Data_Type, it.Length)
+	it.Value.Print()
+	fmt.Printf("}")
+}
+
+// IID printer
+func (iid IID) Print() {
+	if iid.Second_index != 0 {
+		fmt.Printf("{%d.%d.%d.%d}", iid.Structure, iid.Objecto, iid.First_index, iid.Second_index)
+	} else {
+		fmt.Printf("{%d.%d.%d}", iid.Structure, iid.Objecto, iid.First_index)
+	}
+}
+
+// Lists printer
+func (l Lists) Print() {
+	if l.N_Elements == 0 {
+		fmt.Printf("[]")
+		return
+	}
+	fmt.Printf("[\n")
+	for i, elem := range l.Elements {
+		fmt.Printf("    ") // Indent
+		elem.Print()
+		if i < len(l.Elements)-1 {
+			fmt.Printf(",\n")
+		}
+	}
+	fmt.Printf("\n  ]")
 }
 
 func (l IID_List) IIDListSerialize() string {
@@ -54,20 +103,32 @@ func (l IID_List) IIDListSerialize() string {
 }
 
 func DeserializeIID_List(serialized string) IID_List {
-	elements := strings.SplitN(serialized, `\0`, 2)
+	elements := strings.Split(serialized, `\0`)
 	nElements, _ := strconv.Atoi(elements[0])
-	var iidTypes []IID_Tipo
-	remaining := elements[1]
-	for i := 0; i < nElements; i++ {
-		iidType := DeserializeIID_Tipo(remaining)
-		iidTypes = append(iidTypes, iidType)
-		// Move to the next IID_Tipo
-		parts := strings.SplitN(remaining, `\0`, 4)
-		if len(parts) < 4 {
-			break
-		}
-		remaining = strings.Join(parts[3:], `\0`)
+
+	if nElements == 0 {
+		return IID_List{N_Elements: 0, Elements: []IID_Tipo{}}
 	}
+
+	var iidTypes []IID_Tipo
+
+	// For each IID in the list
+	currentIndex := 1
+	for i := 0; i < nElements && currentIndex < len(elements)-2; i++ {
+		// Get Data_Type, Length, and Value parts
+		dataType := elements[currentIndex]
+		length := elements[currentIndex+1]
+		value := elements[currentIndex+2]
+
+		// Create the serialized string for one IID_Tipo
+		tipoStr := dataType + `\0` + length + `\0` + value
+
+		iidType := DeserializeIID_Tipo(tipoStr)
+		iidTypes = append(iidTypes, iidType)
+
+		currentIndex += 3
+	}
+
 	return IID_List{
 		N_Elements: nElements,
 		Elements:   iidTypes,
@@ -93,12 +154,21 @@ func (i IID) IIDSerialize() string {
 }
 
 func DeserializeIID(serialized string) IID {
-	return IID{
-		Structure:    int(serialized[0] - '0'),
-		Objecto:      int(serialized[1] - '0'),
-		First_index:  int(serialized[2] - '0'),
-		Second_index: int(serialized[3] - '0'),
+	// For an input like "1112"
+	var iid IID
+	if len(serialized) >= 1 {
+		iid.Structure, _ = strconv.Atoi(serialized[0:1])
 	}
+	if len(serialized) >= 2 {
+		iid.Objecto, _ = strconv.Atoi(serialized[1:2])
+	}
+	if len(serialized) >= 3 {
+		iid.First_index, _ = strconv.Atoi(serialized[2:3])
+	}
+	if len(serialized) >= 4 {
+		iid.Second_index, _ = strconv.Atoi(serialized[3:4])
+	}
+	return iid
 }
 
 func (t Tipo) TipoSerialize() string {
@@ -107,11 +177,12 @@ func (t Tipo) TipoSerialize() string {
 
 func DeserializeTipo(serialized string) Tipo {
 	elements := strings.Split(serialized, `\0`)
-	data, _ := strconv.Atoi(elements[0])
-	byte := byte(data)
+
+	data := []byte(elements[0])[0] // Get the actual character byte
 	length, _ := strconv.Atoi(elements[1])
+
 	return Tipo{
-		Data_Type: byte,
+		Data_Type: data,
 		Length:    length,
 		Value:     elements[2],
 	}
@@ -129,19 +200,35 @@ func (l Lists) ListsSerialize() string {
 }
 
 func DeserializeLists(serialized string) Lists {
+	if serialized == "" {
+		return Lists{N_Elements: 0, Elements: []Tipo{}}
+	}
+
 	elements := strings.Split(serialized, `\0`)
 	nElements, _ := strconv.Atoi(elements[0])
 
 	var tipos []Tipo
-	for i := 1; i < len(elements); i += 3 {
-		data_type, _ := strconv.Atoi(elements[i])
-		byte := byte(data_type)
-		length, _ := strconv.Atoi(elements[i+1])
-		value := elements[i+2]
-		tipos = append(tipos, Tipo{Data_Type: byte, Length: length, Value: value})
+	currentIndex := 1
+
+	// Process exactly nElements
+	for i := 0; i < nElements && currentIndex+2 < len(elements); i++ {
+		// Make sure we get the Data_Type character
+		dataType := []byte(elements[currentIndex])[0]
+		length, _ := strconv.Atoi(elements[currentIndex+1])
+		value := elements[currentIndex+2]
+
+		tipos = append(tipos, Tipo{
+			Data_Type: dataType,
+			Length:    length,
+			Value:     value,
+		})
+		currentIndex += 3
 	}
 
-	return Lists{N_Elements: nElements, Elements: tipos}
+	return Lists{
+		N_Elements: nElements,
+		Elements:   tipos,
+	}
 }
 
 func NewLists(n_elements int, elements []Tipo) Lists {
