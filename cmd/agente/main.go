@@ -61,9 +61,6 @@ var mockLMIB = map[int]interface{}{
 }
 
 func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr) {
-	// Print the received PDU for debugging
-	fmt.Printf("Received PDU IID list: %+v\n", receivedPDU.Iid_list)
-
 	// Create response PDU
 	responsePDU := messages.PDU{
 		Tag:               receivedPDU.Tag,
@@ -87,10 +84,10 @@ func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr
 		}
 
 		if group, ok := mockLMIB[structure].(map[int]interface{}); ok {
-			fmt.Printf("Found structure %d in mockLMIB\n", structure)
+			fmt.Printf("\nFound structure %d in mockLMIB\n", structure)
 
 			if list, ok := group[object]; ok {
-				fmt.Printf("Found object %d in structure\n", object)
+				fmt.Printf("\nFound object %d in structure\n", object)
 
 				listValue := reflect.ValueOf(list)
 				if listValue.Kind() != reflect.Slice {

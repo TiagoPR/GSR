@@ -177,11 +177,12 @@ func (t Tipo) TipoSerialize() string {
 
 func DeserializeTipo(serialized string) Tipo {
 	elements := strings.Split(serialized, `\0`)
-	data, _ := strconv.Atoi(elements[0])
-	byte := byte(data)
+
+	data := []byte(elements[0])[0] // Get the actual character byte
 	length, _ := strconv.Atoi(elements[1])
+
 	return Tipo{
-		Data_Type: byte,
+		Data_Type: data,
 		Length:    length,
 		Value:     elements[2],
 	}
@@ -199,25 +200,28 @@ func (l Lists) ListsSerialize() string {
 }
 
 func DeserializeLists(serialized string) Lists {
-	elements := strings.Split(serialized, `\0`)
-	nElements, _ := strconv.Atoi(elements[0])
-
-	if nElements == 0 {
+	if serialized == "" {
 		return Lists{N_Elements: 0, Elements: []Tipo{}}
 	}
+
+	elements := strings.Split(serialized, `\0`)
+	nElements, _ := strconv.Atoi(elements[0])
 
 	var tipos []Tipo
 	currentIndex := 1
 
-	for i := 0; i < nElements; i++ {
-		if currentIndex+2 >= len(elements) {
-			break
-		}
+	// Process exactly nElements
+	for i := 0; i < nElements && currentIndex+2 < len(elements); i++ {
+		// Make sure we get the Data_Type character
+		dataType := []byte(elements[currentIndex])[0]
+		length, _ := strconv.Atoi(elements[currentIndex+1])
+		value := elements[currentIndex+2]
 
-		// Reconstruct the tipo string with \0 separators
-		tipoStr := elements[currentIndex] + `\0` + elements[currentIndex+1] + `\0` + elements[currentIndex+2]
-		tipo := DeserializeTipo(tipoStr)
-		tipos = append(tipos, tipo)
+		tipos = append(tipos, Tipo{
+			Data_Type: dataType,
+			Length:    length,
+			Value:     value,
+		})
 		currentIndex += 3
 	}
 
