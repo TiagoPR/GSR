@@ -61,7 +61,6 @@ var mockLMIB = map[int]interface{}{
 }
 
 func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr) {
-	// Create response PDU
 	responsePDU := messages.PDU{
 		Tag:               receivedPDU.Tag,
 		Tipo:              'R',
@@ -71,80 +70,91 @@ func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr
 	}
 
 	var valueElements []types.Tipo
+	var errorElements []types.Tipo
 
 	// Process each OID in the IIDList
 	for _, iid := range receivedPDU.Iid_list.Elements {
 		structure := iid.Value.Structure
 		object := iid.Value.Objecto
-		firstIndex := iid.Value.First_index - 1
-		secondIndex := -1
-
-		if iid.Value.Second_index != 0 {
-			secondIndex = iid.Value.Second_index - 1
-		}
+		firstIndex := iid.Value.First_index
+		secondIndex := iid.Value.Second_index
 
 		if group, ok := mockLMIB[structure].(map[int]interface{}); ok {
-			fmt.Printf("\nFound structure %d in mockLMIB\n", structure)
-
 			if list, ok := group[object]; ok {
-				fmt.Printf("\nFound object %d in structure\n", object)
-
 				listValue := reflect.ValueOf(list)
 				if listValue.Kind() != reflect.Slice {
-					fmt.Printf("Warning: Object is not a slice\n")
+					// Add error for non-slice object
+					errorElements = append(errorElements, types.Tipo{
+						Data_Type: 'S',
+						Length:    1,
+						Value:     "Object is not a list",
+					})
 					continue
 				}
 
-				start := firstIndex
-				end := listValue.Len()
-				if secondIndex != -1 && secondIndex < end {
-					end = secondIndex + 1
-				}
-
-				fmt.Printf("Processing range: %d to %d (list length: %d)\n",
-					start+1, end, listValue.Len())
-
-				if start >= 0 && start < listValue.Len() {
-					for j := start; j < end && j < listValue.Len(); j++ {
+				// Handle different IID patterns
+				if firstIndex == 0 {
+					// Case x.y: Return all values
+					for j := 0; j < listValue.Len(); j++ {
 						value := listValue.Index(j).Interface()
-						fmt.Printf("Processing value at index %d: %v\n", j+1, value)
-
-						var tipo types.Tipo
-						switch v := value.(type) {
-						case int:
-							tipo = types.Tipo{
-								Data_Type: 'I',
-								Length:    1,
-								Value:     strconv.Itoa(v),
-							}
-						case string:
-							tipo = types.Tipo{
-								Data_Type: 'S',
-								Length:    1,
-								Value:     v,
-							}
-						case time.Time:
-							tipo = types.Tipo{
-								Data_Type: 'T',
-								Length:    8,
-								Value:     v.Format(time.RFC3339),
-							}
-						default:
-							fmt.Printf("Warning: Unsupported type %T\n", v)
-							continue
+						tipo := processValue(value)
+						if tipo != nil {
+							valueElements = append(valueElements, *tipo)
 						}
-						valueElements = append(valueElements, tipo)
-						fmt.Printf("Added value to elements. Current count: %d\n",
-							len(valueElements))
 					}
 				} else {
-					fmt.Printf("Warning: Start index %d out of range\n", start+1)
+					// Cases x.y.z or x.y.z.w
+					idx := firstIndex - 1 // Convert to 0-based index
+					if idx >= listValue.Len() {
+						// Add error for out of range index
+						errMsg := fmt.Sprintf("Index %d out of range for object %d.%d", firstIndex, structure, object)
+						errorElements = append(errorElements, types.Tipo{
+							Data_Type: 'S',
+							Length:    1,
+							Value:     errMsg,
+						})
+						continue
+					}
+
+					if secondIndex == 0 {
+						// Case x.y.z: Return single value
+						value := listValue.Index(idx).Interface()
+						tipo := processValue(value)
+						if tipo != nil {
+							valueElements = append(valueElements, *tipo)
+						}
+					} else {
+						// Case x.y.z.w: Return range of values
+						end := secondIndex
+						if end > listValue.Len() {
+							end = listValue.Len()
+						}
+						for j := idx; j < end; j++ {
+							value := listValue.Index(j).Interface()
+							tipo := processValue(value)
+							if tipo != nil {
+								valueElements = append(valueElements, *tipo)
+							}
+						}
+					}
 				}
 			} else {
-				fmt.Printf("Warning: Object %d not found in structure\n", object)
+				// Add error for non-existent object
+				errMsg := fmt.Sprintf("Object %d not found in structure %d", object, structure)
+				errorElements = append(errorElements, types.Tipo{
+					Data_Type: 'S',
+					Length:    1,
+					Value:     errMsg,
+				})
 			}
 		} else {
-			fmt.Printf("Warning: Structure %d not found in mockLMIB\n", structure)
+			// Add error for non-existent structure
+			errMsg := fmt.Sprintf("Structure %d not found", structure)
+			errorElements = append(errorElements, types.Tipo{
+				Data_Type: 'S',
+				Length:    1,
+				Value:     errMsg,
+			})
 		}
 	}
 
@@ -153,22 +163,49 @@ func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr
 		N_Elements: len(valueElements),
 		Elements:   valueElements,
 	}
-
 	responsePDU.Error_list = types.Lists{
-		N_Elements: 0,
-		Elements:   []types.Tipo{},
+		N_Elements: len(errorElements),
+		Elements:   errorElements,
 	}
 
 	// Serialize and send
 	serializedPDU := responsePDU.SerializePDU()
 	fmt.Printf("Serialized PDU: %s\n", serializedPDU)
-
 	_, err := conn.WriteToUDP([]byte(serializedPDU), addr)
 	if err != nil {
 		fmt.Printf("Error sending response: %v\n", err)
 	} else {
 		fmt.Println("Response PDU sent successfully")
 	}
+}
+
+// Helper function to process values and return appropriate Tipo
+func processValue(value interface{}) *types.Tipo {
+	var tipo types.Tipo
+	switch v := value.(type) {
+	case int:
+		tipo = types.Tipo{
+			Data_Type: 'I',
+			Length:    1,
+			Value:     strconv.Itoa(v),
+		}
+	case string:
+		tipo = types.Tipo{
+			Data_Type: 'S',
+			Length:    1,
+			Value:     v,
+		}
+	case time.Time:
+		timeStr := v.Format(time.RFC3339)
+		tipo = types.Tipo{
+			Data_Type: 'T',
+			Length:    len(timeStr),
+			Value:     timeStr,
+		}
+	default:
+		return nil
+	}
+	return &tipo
 }
 
 func sendPing(conn *net.UDPConn, addr *net.UDPAddr, ip string) {
