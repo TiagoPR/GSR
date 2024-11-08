@@ -33,32 +33,40 @@ func DeserializePDU(serialized string) PDU {
 	// First get number of IID elements
 	parts := strings.SplitN(remaining, `\0`, 2)
 	nIIDElements, _ := strconv.Atoi(parts[0])
-
 	if len(parts) < 2 {
 		return pdu
 	}
-
 	remaining = parts[1]
 
 	// Calculate where IID_List ends based on number of elements
 	iidParts := make([]string, 0)
 	iidParts = append(iidParts, strconv.Itoa(nIIDElements))
 
-	currentParts := strings.SplitN(remaining, `\0`, 4) // Data_Type, Length, Value, rest
-	if len(currentParts) >= 3 {
+	// Process each IID
+	currentRemaining := remaining
+	for i := 0; i < nIIDElements; i++ {
+		currentParts := strings.SplitN(currentRemaining, `\0`, 4) // Data_Type, Length, Value, rest
+		if len(currentParts) < 3 {
+			break
+		}
+
+		// Add current IID parts
 		iidParts = append(iidParts, currentParts[0], currentParts[1], currentParts[2])
+
+		// Update remaining for next iteration
 		if len(currentParts) > 3 {
-			remaining = currentParts[3]
+			currentRemaining = currentParts[3]
 		} else {
-			remaining = ""
+			currentRemaining = ""
+			break
 		}
 	}
 
 	// Deserialize IID_List
 	pdu.Iid_list = types.DeserializeIID_List(strings.Join(iidParts, `\0`))
 
-	// Split remaining into Value_list and Error_list
-	valueParts := strings.Split(remaining, `\00\0`)
+	// Process Value_list and Error_list from the last remaining
+	valueParts := strings.Split(currentRemaining, `\00\0`)
 
 	// Process Value_list if it exists
 	if len(valueParts) > 0 && valueParts[0] != "" {

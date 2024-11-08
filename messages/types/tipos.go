@@ -103,36 +103,48 @@ func (l IID_List) IIDListSerialize() string {
 }
 
 func DeserializeIID_List(serialized string) IID_List {
-	elements := strings.Split(serialized, `\0`)
-	nElements, _ := strconv.Atoi(elements[0])
+	parts := strings.Split(serialized, `\0`)
 
-	if nElements == 0 {
-		return IID_List{N_Elements: 0, Elements: []IID_Tipo{}}
-	}
+	nElements, _ := strconv.Atoi(parts[0])
 
 	var iidTypes []IID_Tipo
 
-	// For each IID in the list
-	currentIndex := 1
-	for i := 0; i < nElements && currentIndex < len(elements)-2; i++ {
-		// Get Data_Type, Length, and Value parts
-		dataType := elements[currentIndex]
-		length := elements[currentIndex+1]
-		value := elements[currentIndex+2]
+	if nElements == 0 {
+		return IID_List{N_Elements: 0, Elements: iidTypes}
+	}
 
-		// Create the serialized string for one IID_Tipo
-		tipoStr := dataType + `\0` + length + `\0` + value
+	// Skip the count (parts[0])
+	remaining := strings.Join(parts[1:], `\0`)
 
+	// Process each IID
+	for i := 0; i < nElements; i++ {
+
+		// Split for current IID
+		iidParts := strings.SplitN(remaining, `\0`, 4)
+		if len(iidParts) < 3 {
+			fmt.Println("Not enough parts for IID")
+			break
+		}
+
+		// Create IID_Tipo from the first three parts
+		tipoStr := iidParts[0] + `\0` + iidParts[1] + `\0` + iidParts[2]
 		iidType := DeserializeIID_Tipo(tipoStr)
 		iidTypes = append(iidTypes, iidType)
 
-		currentIndex += 3
+		// If there's more to process, update remaining
+		if len(iidParts) > 3 {
+			remaining = iidParts[3]
+		} else {
+			break
+		}
+
 	}
 
-	return IID_List{
+	result := IID_List{
 		N_Elements: nElements,
 		Elements:   iidTypes,
 	}
+	return result
 }
 
 func (t IID_Tipo) TipoIIDSerialize() string {
@@ -154,21 +166,27 @@ func (i IID) IIDSerialize() string {
 }
 
 func DeserializeIID(serialized string) IID {
-	// For an input like "1112"
-	var iid IID
+	var structure, object, firstIndex, secondIndex int
+
 	if len(serialized) >= 1 {
-		iid.Structure, _ = strconv.Atoi(serialized[0:1])
+		structure, _ = strconv.Atoi(serialized[:1])
 	}
 	if len(serialized) >= 2 {
-		iid.Objecto, _ = strconv.Atoi(serialized[1:2])
+		object, _ = strconv.Atoi(serialized[1:2])
 	}
 	if len(serialized) >= 3 {
-		iid.First_index, _ = strconv.Atoi(serialized[2:3])
+		firstIndex, _ = strconv.Atoi(serialized[2:3])
 	}
 	if len(serialized) >= 4 {
-		iid.Second_index, _ = strconv.Atoi(serialized[3:4])
+		secondIndex, _ = strconv.Atoi(serialized[3:4])
 	}
-	return iid
+
+	return IID{
+		Structure:    structure,
+		Objecto:      object,
+		First_index:  firstIndex,
+		Second_index: secondIndex,
+	}
 }
 
 func (t Tipo) TipoSerialize() string {
