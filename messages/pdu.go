@@ -69,29 +69,46 @@ func DeserializePDU(serialized string) PDU {
 	pdu.Value_list = types.Lists{N_Elements: 0, Elements: []types.Tipo{}}
 	pdu.Error_list = types.Lists{N_Elements: 0, Elements: []types.Tipo{}}
 
-	// First check if we have a value list by looking at the first character
-	firstChar := currentRemaining[0]
-	if firstChar == '0' {
+	if len(currentRemaining) == 0 {
+		return pdu
+	}
+
+	// Get number of value list elements
+	parts = strings.SplitN(currentRemaining, `\0`, 2)
+	nValueElements, _ := strconv.Atoi(parts[0])
+	fmt.Printf("Number of value elements: %d\n", nValueElements)
+
+	if nValueElements == 0 {
 		// No value list, everything after first \0 is error list
-		parts := strings.SplitN(currentRemaining, `\0`, 2)
 		if len(parts) > 1 {
-			fmt.Println("Found error list only")
-			fmt.Printf("Error list string: %s\n", parts[1])
+			fmt.Println("Processing error list only")
 			pdu.Error_list = types.DeserializeLists(parts[1])
 		}
 	} else {
-		// We have a value list, split by \00\0
-		listParts := strings.Split(currentRemaining, `\00\0`)
-		fmt.Printf("Parts after \\00\\0 split: %v\n", listParts)
+		// We have a value list
+		// Count \0 occurrences needed for value list (3 per element plus 1 for initial count)
+		expectedValueSplits := nValueElements*3 + 1
+		fmt.Printf("Expected value splits: %d\n", expectedValueSplits)
 
-		if len(listParts) > 0 {
-			fmt.Printf("Value list string: %s\n", listParts[0])
-			pdu.Value_list = types.DeserializeLists(listParts[0])
+		// Split the full string
+		allParts := strings.Split(currentRemaining, `\0`)
+		fmt.Printf("Total parts: %d\n", len(allParts))
 
-			if len(listParts) > 1 {
-				fmt.Printf("Error list string: %s\n", listParts[1])
-				pdu.Error_list = types.DeserializeLists(listParts[1])
+		if len(allParts) > expectedValueSplits {
+			// Reconstruct value list and error list
+			valueListStr := strings.Join(allParts[:expectedValueSplits], `\0`)
+			errorListStr := strings.Join(allParts[expectedValueSplits:], `\0`)
+
+			fmt.Printf("Value list string: %s\n", valueListStr)
+			fmt.Printf("Error list string: %s\n", errorListStr)
+
+			pdu.Value_list = types.DeserializeLists(valueListStr)
+			if errorListStr != "" {
+				pdu.Error_list = types.DeserializeLists(errorListStr)
 			}
+		} else {
+			// Only value list
+			pdu.Value_list = types.DeserializeLists(currentRemaining)
 		}
 	}
 
