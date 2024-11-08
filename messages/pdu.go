@@ -22,6 +22,7 @@ func (p PDU) SerializePDU() string {
 }
 
 func DeserializePDU(serialized string) PDU {
+	fmt.Println("\nDeserializing PDU...")
 	elements := strings.SplitN(serialized, `\0`, 7)
 	pdu := PDU{}
 	pdu.Tag = elements[0]
@@ -45,15 +46,11 @@ func DeserializePDU(serialized string) PDU {
 	// Process each IID
 	currentRemaining := remaining
 	for i := 0; i < nIIDElements; i++ {
-		currentParts := strings.SplitN(currentRemaining, `\0`, 4) // Data_Type, Length, Value, rest
+		currentParts := strings.SplitN(currentRemaining, `\0`, 4)
 		if len(currentParts) < 3 {
 			break
 		}
-
-		// Add current IID parts
 		iidParts = append(iidParts, currentParts[0], currentParts[1], currentParts[2])
-
-		// Update remaining for next iteration
 		if len(currentParts) > 3 {
 			currentRemaining = currentParts[3]
 		} else {
@@ -65,23 +62,41 @@ func DeserializePDU(serialized string) PDU {
 	// Deserialize IID_List
 	pdu.Iid_list = types.DeserializeIID_List(strings.Join(iidParts, `\0`))
 
-	// Process Value_list and Error_list from the last remaining
-	valueParts := strings.Split(currentRemaining, `\00\0`)
+	fmt.Println("Processing Value/Error lists...")
+	fmt.Printf("Current remaining: %s\n", currentRemaining)
 
-	// Process Value_list if it exists
-	if len(valueParts) > 0 && valueParts[0] != "" {
-		pdu.Value_list = types.DeserializeLists(valueParts[0])
+	// Initialize empty lists
+	pdu.Value_list = types.Lists{N_Elements: 0, Elements: []types.Tipo{}}
+	pdu.Error_list = types.Lists{N_Elements: 0, Elements: []types.Tipo{}}
+
+	// First check if we have a value list by looking at the first character
+	firstChar := currentRemaining[0]
+	if firstChar == '0' {
+		// No value list, everything after first \0 is error list
+		parts := strings.SplitN(currentRemaining, `\0`, 2)
+		if len(parts) > 1 {
+			fmt.Println("Found error list only")
+			fmt.Printf("Error list string: %s\n", parts[1])
+			pdu.Error_list = types.DeserializeLists(parts[1])
+		}
 	} else {
-		pdu.Value_list = types.Lists{N_Elements: 0, Elements: []types.Tipo{}}
+		// We have a value list, split by \00\0
+		listParts := strings.Split(currentRemaining, `\00\0`)
+		fmt.Printf("Parts after \\00\\0 split: %v\n", listParts)
+
+		if len(listParts) > 0 {
+			fmt.Printf("Value list string: %s\n", listParts[0])
+			pdu.Value_list = types.DeserializeLists(listParts[0])
+
+			if len(listParts) > 1 {
+				fmt.Printf("Error list string: %s\n", listParts[1])
+				pdu.Error_list = types.DeserializeLists(listParts[1])
+			}
+		}
 	}
 
-	// Process Error_list if it exists
-	if len(valueParts) > 1 {
-		pdu.Error_list = types.DeserializeLists(valueParts[1])
-	} else {
-		pdu.Error_list = types.Lists{N_Elements: 0, Elements: []types.Tipo{}}
-	}
-
+	fmt.Printf("Final Value list: %+v\n", pdu.Value_list)
+	fmt.Printf("Final Error list: %+v\n", pdu.Error_list)
 	return pdu
 }
 
