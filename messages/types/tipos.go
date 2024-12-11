@@ -207,13 +207,14 @@ func DeserializeTipo(serialized string) Tipo {
 }
 
 func (l Lists) ListsSerialize() string {
-	line := fmt.Sprintf(`%d\0`, l.N_Elements)
+	if l.N_Elements == 0 {
+		return `\0`
+	}
 
-	// Iterate over the Tipo slice and serialize each Tipo
+	line := fmt.Sprintf(`%d\0`, l.N_Elements)
 	for _, t := range l.Elements {
 		line += t.TipoSerialize()
 	}
-
 	return line
 }
 
@@ -289,20 +290,36 @@ func NewIID(structure int, objeto int, first int, second int) IID {
 }
 
 // Timestamps
-func NewRequestTimestamp() Tipo {
+func NewInfoTimestamp() Tipo {
 	t := time.Now()
-	timestamp := t.Format("02:01:2006:15:04:05.000")
+	// Format: days hours mins secs ms
+	timestamp := fmt.Sprintf("%02d%02d%02d%02d%03d",
+		t.Day(),
+		t.Hour(),
+		t.Minute(),
+		t.Second(),
+		t.Nanosecond()/1000000) // Convert nanoseconds to milliseconds
 	return Tipo{
 		Data_Type: 'T',
-		Length:    7,
+		Length:    5,
 		Value:     timestamp,
 	}
 }
 
-func NewInfoTimestamp(value string) Tipo {
+func NewRequestTimestamp() Tipo {
+	t := time.Now()
+	// Format: day month year hours mins secs ms
+	timestamp := fmt.Sprintf("%02d%02d%04d%02d%02d%02d%03d",
+		t.Day(),
+		t.Month(),
+		t.Year(),
+		t.Hour(),
+		t.Minute(),
+		t.Second(),
+		t.Nanosecond()/1000000) // Convert nanoseconds to milliseconds
 	return Tipo{
 		Data_Type: 'T',
-		Length:    5,
-		Value:     value,
+		Length:    7,
+		Value:     timestamp,
 	}
 }

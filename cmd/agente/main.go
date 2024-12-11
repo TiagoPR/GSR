@@ -60,7 +60,7 @@ func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr
 	responsePDU := messages.PDU{
 		Tag:               receivedPDU.Tag,
 		Tipo:              'R',
-		Timestamp:         types.NewRequestTimestamp(),
+		Timestamp:         types.NewInfoTimestamp(),
 		MessageIdentifier: "agente",
 		Iid_list:          receivedPDU.Iid_list,
 	}
