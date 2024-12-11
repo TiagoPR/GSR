@@ -14,22 +14,18 @@ import (
 
 var mockLMIB = map[int]interface{}{
 	1: map[int]interface{}{ // device Group
-		1: []string{"00:1B:44:11:3A:B7", "00:1B:44:11:3A:C8"},       // id list
-		2: []string{"Lights & A/C Conditioning", "Security System"}, // type list
-		3: []int{30, 60},                                            // beaconRate list
-		4: []int{2, 3},                                              // nSensors list
-		5: []int{2, 2},                                              // nActuators list
-		6: []string{ // dateAndTime list
-			time.Now().Format("2006-01-02 15:04:05"),
-			time.Now().Add(-1 * time.Hour).Format("2006-01-02 15:04:05"),
-		},
-		7: []string{"10:15:30", "05:30:15"}, // upTime list
+		1: []string{"00:1B:44:11:3A:B7"},         // id list
+		2: []string{"Lights & A/C Conditioning"}, // type list
+		3: []int{30},                             // beaconRate list
+		4: []int{2},                              // nSensors list
+		5: []int{2},                              // nActuators list
+		6: []string{time.Now().Format("2006-01-02 15:04:05")},
+		7: []string{"10:15:30"}, // upTime list
 		8: []string{ // lastTimeUpdated list
 			time.Now().Add(-5 * time.Minute).Format("2006-01-02 15:04:05"),
-			time.Now().Add(-10 * time.Minute).Format("2006-01-02 15:04:05"),
 		},
-		9:  []int{1, 1}, // operationalStatus list
-		10: []int{0, 0}, // reset list
+		9:  []int{1}, // operationalStatus list
+		10: []int{0}, // reset list
 	},
 	2: map[int]interface{}{ // sensors Table
 		1: []string{"00:1B:44:11:3A:B8", "00:1B:44:11:3A:B9", "00:1B:44:11:3A:D1", "00:1B:44:11:3A:D2", "00:1B:44:11:3A:D3"}, // id list
@@ -68,11 +64,9 @@ func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr
 		MessageIdentifier: "agente",
 		Iid_list:          receivedPDU.Iid_list,
 	}
-
 	var valueElements []types.Tipo
 	var errorElements []types.Tipo
 
-	// Process each OID in the IIDList
 	for _, iid := range receivedPDU.Iid_list.Elements {
 		structure := iid.Value.Structure
 		object := iid.Value.Objecto
@@ -83,7 +77,6 @@ func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr
 			if list, ok := group[object]; ok {
 				listValue := reflect.ValueOf(list)
 				if listValue.Kind() != reflect.Slice {
-					// Add error for non-slice object
 					errorElements = append(errorElements, types.Tipo{
 						Data_Type: 'S',
 						Length:    1,
@@ -97,8 +90,7 @@ func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr
 					// Case x.y: Return all values
 					for j := 0; j < listValue.Len(); j++ {
 						value := listValue.Index(j).Interface()
-						tipo := processValue(value)
-						if tipo != nil {
+						if tipo := processValue(value); tipo != nil {
 							valueElements = append(valueElements, *tipo)
 						}
 					}
@@ -106,7 +98,6 @@ func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr
 					// Cases x.y.z or x.y.z.w
 					idx := firstIndex - 1 // Convert to 0-based index
 					if idx >= listValue.Len() {
-						// Add error for out of range index
 						errMsg := fmt.Sprintf("Index %d out of range for object %d.%d", firstIndex, structure, object)
 						errorElements = append(errorElements, types.Tipo{
 							Data_Type: 'S',
@@ -119,27 +110,40 @@ func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr
 					if secondIndex == 0 {
 						// Case x.y.z: Return single value
 						value := listValue.Index(idx).Interface()
-						tipo := processValue(value)
-						if tipo != nil {
+						if tipo := processValue(value); tipo != nil {
 							valueElements = append(valueElements, *tipo)
 						}
 					} else {
-						// Case x.y.z.w: Return range of values
-						end := secondIndex
-						if end > listValue.Len() {
-							end = listValue.Len()
+						// Case x.y.z.w: Handle range request
+						secondIdx := secondIndex - 1 // Convert to 0-based index
+
+						// Always add the first value if it exists
+						value := listValue.Index(idx).Interface()
+						if tipo := processValue(value); tipo != nil {
+							valueElements = append(valueElements, *tipo)
 						}
-						for j := idx; j < end; j++ {
+
+						// Add error if second index is out of range
+						if secondIdx >= listValue.Len() {
+							errMsg := fmt.Sprintf("Index %d out of range for object %d.%d", secondIndex, structure, object)
+							errorElements = append(errorElements, types.Tipo{
+								Data_Type: 'S',
+								Length:    1,
+								Value:     errMsg,
+							})
+							continue
+						}
+
+						// Add remaining values if second index is valid
+						for j := idx + 1; j <= secondIdx; j++ {
 							value := listValue.Index(j).Interface()
-							tipo := processValue(value)
-							if tipo != nil {
+							if tipo := processValue(value); tipo != nil {
 								valueElements = append(valueElements, *tipo)
 							}
 						}
 					}
 				}
 			} else {
-				// Add error for non-existent object
 				errMsg := fmt.Sprintf("Object %d not found in structure %d", object, structure)
 				errorElements = append(errorElements, types.Tipo{
 					Data_Type: 'S',
@@ -148,7 +152,6 @@ func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr
 				})
 			}
 		} else {
-			// Add error for non-existent structure
 			errMsg := fmt.Sprintf("Structure %d not found", structure)
 			errorElements = append(errorElements, types.Tipo{
 				Data_Type: 'S',
@@ -158,7 +161,6 @@ func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr
 		}
 	}
 
-	// Set Value_list and Error_list
 	responsePDU.Value_list = types.Lists{
 		N_Elements: len(valueElements),
 		Elements:   valueElements,
@@ -168,11 +170,10 @@ func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr
 		Elements:   errorElements,
 	}
 
-	// Serialize and send
 	serializedPDU := responsePDU.SerializePDU()
 	fmt.Printf("Serialized PDU: %s\n", serializedPDU)
-	_, err := conn.WriteToUDP([]byte(serializedPDU), addr)
-	if err != nil {
+
+	if _, err := conn.WriteToUDP([]byte(serializedPDU), addr); err != nil {
 		fmt.Printf("Error sending response: %v\n", err)
 	} else {
 		fmt.Println("Response PDU sent successfully")

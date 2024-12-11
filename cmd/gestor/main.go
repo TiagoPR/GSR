@@ -53,7 +53,12 @@ func getRequest() messages.PDU {
 	fmt.Println("How many IID do you want to send?")
 	nIIDS, _ := reader.ReadString('\n')
 	nIIDS = strings.TrimSpace(nIIDS)
-	number, _ := strconv.Atoi(nIIDS)
+	number, err := strconv.Atoi(nIIDS)
+
+	if err != nil {
+		fmt.Println("Wrong value, quitting...")
+		os.Exit(1)
+	}
 
 	// Initialize the list as an empty slice
 	iid_list := []types.IID_Tipo{}
