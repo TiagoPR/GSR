@@ -60,7 +60,7 @@ func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr
 	responsePDU := messages.PDU{
 		Tag:               receivedPDU.Tag,
 		Tipo:              'R',
-		Timestamp:         types.NewInfoTimestamp(),
+		Timestamp:         types.NewRequestTimestamp(),
 		MessageIdentifier: "agente",
 		Iid_list:          receivedPDU.Iid_list,
 	}
@@ -209,6 +209,91 @@ func processValue(value interface{}) *types.Tipo {
 	return &tipo
 }
 
+func StartNotificationSender(conn *net.UDPConn, addr *net.UDPAddr) {
+	// Get the device group for beacon rate
+	deviceGroup, ok := mockLMIB[1].(map[int]interface{})
+	if !ok {
+		fmt.Println("Error: Could not access device group")
+		return
+	}
+
+	// Get the beacon rate
+	beaconRates, ok := deviceGroup[3].([]int)
+	if !ok || len(beaconRates) == 0 {
+		fmt.Println("Error: Could not get beacon rate")
+		return
+	}
+	rate := beaconRates[0]
+
+	// Create ticker for the beacon rate
+	ticker := time.NewTicker(time.Duration(rate) * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		// Get temperature sensor value
+		sensorsTable, ok := mockLMIB[2].(map[int]interface{})
+		if !ok {
+			fmt.Println("Error: Could not access sensors table")
+			continue
+		}
+
+		statusList, ok := sensorsTable[3].([]int)
+		if !ok || len(statusList) < 2 {
+			fmt.Println("Error: Could not access temperature sensor status")
+			continue
+		}
+
+		temperatureValue := statusList[1] // Index 1 is the temperature sensor
+
+		// Create IID list for temperature sensor status
+		iidList := types.IID_List{
+			N_Elements: 1,
+			Elements: []types.IID_Tipo{
+				{
+					Data_Type: 'D',
+					Length:    4,
+					Value: types.IID{
+						Structure:    2, // Sensors table
+						Objecto:      3, // Status list
+						First_index:  2, // Temperature sensor (index 2)
+						Second_index: 0,
+					},
+				},
+			},
+		}
+
+		// Create value list with temperature
+		valueList := types.Lists{
+			N_Elements: 1,
+			Elements: []types.Tipo{
+				{
+					Data_Type: 'I',
+					Length:    1,
+					Value:     strconv.Itoa(temperatureValue),
+				},
+			},
+		}
+
+		// Create notification PDU
+		pdu := messages.NewPDU(
+			'N', // Notification type
+			types.NewInfoTimestamp(),
+			"agente",
+			iidList,
+			valueList,
+			types.Lists{}, // Empty error list
+		)
+
+		// Serialize and send PDU
+		serializedPDU := pdu.SerializePDU()
+		if _, err := conn.WriteToUDP([]byte(serializedPDU), addr); err != nil {
+			fmt.Printf("Error sending notification: %v\n", err)
+		} else {
+			fmt.Printf("Notification sent - Temperature: %d°C\n", temperatureValue)
+		}
+	}
+}
+
 func sendPing(conn *net.UDPConn, addr *net.UDPAddr, ip string) {
 	_, err := conn.WriteToUDP([]byte(ip), addr)
 	if err != nil {
@@ -264,6 +349,11 @@ func main() {
 	fmt.Println("Sending ping to gestor")
 	// gestor needs to identify the agent
 	sendPing(ser, &gestorAddr, ip)
+
+	go func() {
+		// Start the notification sender in a goroutine
+		go StartNotificationSender(ser, &gestorAddr)
+	}()
 
 	wg.Add(1)
 	go readPDU(ser)

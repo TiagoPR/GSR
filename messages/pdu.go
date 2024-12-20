@@ -62,9 +62,6 @@ func DeserializePDU(serialized string) PDU {
 	// Deserialize IID_List
 	pdu.Iid_list = types.DeserializeIID_List(strings.Join(iidParts, `\0`))
 
-	fmt.Println("Processing Value/Error lists...")
-	fmt.Printf("Current remaining: %s\n", currentRemaining)
-
 	// Initialize empty lists
 	pdu.Value_list = types.Lists{N_Elements: 0, Elements: []types.Tipo{}}
 	pdu.Error_list = types.Lists{N_Elements: 0, Elements: []types.Tipo{}}
@@ -76,31 +73,24 @@ func DeserializePDU(serialized string) PDU {
 	// Get number of value list elements
 	parts = strings.SplitN(currentRemaining, `\0`, 2)
 	nValueElements, _ := strconv.Atoi(parts[0])
-	fmt.Printf("Number of value elements: %d\n", nValueElements)
 
 	if nValueElements == 0 {
 		// No value list, everything after first \0 is error list
 		if len(parts) > 1 {
-			fmt.Println("Processing error list only")
 			pdu.Error_list = types.DeserializeLists(parts[1])
 		}
 	} else {
 		// We have a value list
 		// Count \0 occurrences needed for value list (3 per element plus 1 for initial count)
 		expectedValueSplits := nValueElements*3 + 1
-		fmt.Printf("Expected value splits: %d\n", expectedValueSplits)
 
 		// Split the full string
 		allParts := strings.Split(currentRemaining, `\0`)
-		fmt.Printf("Total parts: %d\n", len(allParts))
 
 		if len(allParts) > expectedValueSplits {
 			// Reconstruct value list and error list
 			valueListStr := strings.Join(allParts[:expectedValueSplits], `\0`)
 			errorListStr := strings.Join(allParts[expectedValueSplits:], `\0`)
-
-			fmt.Printf("Value list string: %s\n", valueListStr)
-			fmt.Printf("Error list string: %s\n", errorListStr)
 
 			pdu.Value_list = types.DeserializeLists(valueListStr)
 			if errorListStr != "" {
@@ -112,8 +102,6 @@ func DeserializePDU(serialized string) PDU {
 		}
 	}
 
-	fmt.Printf("Final Value list: %+v\n", pdu.Value_list)
-	fmt.Printf("Final Error list: %+v\n", pdu.Error_list)
 	return pdu
 }
 

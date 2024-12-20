@@ -10,21 +10,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 var agents []string
-
-func listenAgents(pc net.PacketConn) {
-	buf := make([]byte, 1024)
-	fmt.Println("Listening for agent's")
-	_, addr, err := pc.ReadFrom(buf)
-	agents = append(agents, addr.String())
-	if err != nil {
-		fmt.Println("Couldn't read for agent's")
-	}
-	println(agents[len(agents)-1])
-}
 
 func readPDU(ser *net.UDPConn) messages.PDU {
 	buf := make([]byte, 2048)
@@ -151,33 +139,77 @@ func send() {
 	receivedPDU.Print()
 }
 
+func listenForPings(pc net.PacketConn) {
+	for {
+		buf := make([]byte, 1024)
+		_, addr, err := pc.ReadFrom(buf)
+		if err != nil {
+			fmt.Printf("Error reading ping: %v\n", err)
+			continue
+		}
+
+		// Only handle as a ping if it's a new agent
+		if !contains(agents, addr.String()) {
+			agents = append(agents, addr.String())
+			fmt.Printf("New agent connected from: %s\n", addr.String())
+			fmt.Printf("%v", agents)
+		}
+	}
+}
+
+func listenForNotifications(pc net.PacketConn) {
+	for {
+		buf := make([]byte, 2048)
+		n, addr, err := pc.ReadFrom(buf)
+		if err != nil {
+			fmt.Printf("Error reading from connection: %v\n", err)
+			continue
+		}
+
+		// Try to deserialize as PDU
+		serializedPdu := string(buf[:n])
+		pdu := messages.DeserializePDU(serializedPdu)
+
+		// Handle PDU based on type
+		if pdu.Tipo == 'N' { // Notification
+			fmt.Printf("\nReceived Notification from %v\n", addr)
+			pdu.Print()
+
+		}
+	}
+}
+
 func main() {
-	//p := make([]byte, 2048)
 	if len(os.Args) < 2 {
 		panic("Introduce the gestor's IP")
 	}
-
 	ip := os.Args[1]
 
-	// listen to incoming udp packets
+	// Listen for UDP packets
 	pc, err := net.ListenPacket("udp", ip+":162")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer pc.Close()
 
-	go listenAgents(pc)
+	// Start ping listener in a goroutine
+	go listenForPings(pc)
 
-	time.Sleep(5)
+	// Start notification listener in a goroutine
+	go listenForNotifications(pc)
 
+	// Handle user input in the main goroutine
 	for {
 		send()
 	}
+}
 
-	//_, err = bufio.NewReader(conn).Read(p)
-	//if err == nil {
-	//	fmt.Printf("%s\n", p)
-	//} else {
-	//	fmt.Printf("Some error %v\n", err)
-	//}
+// Helper function to check if a string is in a slice
+func contains(slice []string, str string) bool {
+	for _, v := range slice {
+		if v == str {
+			return true
+		}
+	}
+	return false
 }
