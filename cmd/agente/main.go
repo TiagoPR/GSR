@@ -14,26 +14,26 @@ import (
 
 var mockLMIB = map[int]interface{}{
 	1: map[int]interface{}{ // device Group
-		1: []string{"00:1B:44:11:3A:B7"},         // id list
-		2: []string{"Lights & A/C Conditioning"}, // type list
-		3: []int{30},                             // beaconRate list
-		4: []int{2},                              // nSensors list
-		5: []int{2},                              // nActuators list
-		6: []string{time.Now().Format("2006-01-02 15:04:05")},
-		7: []string{"10:15:30"}, // upTime list
-		8: []string{ // lastTimeUpdated list
+		1: []string{"00:1B:44:11:3A:B7"},                      // id read-only
+		2: []string{"Lights & A/C Conditioning"},              // type read-only
+		3: []int{30},                                          // beaconRate read-write
+		4: []int{2},                                           // nSensors read-only
+		5: []int{2},                                           // nActuators read-only
+		6: []string{time.Now().Format("2006-01-02 15:04:05")}, // dateAndTime read-write
+		7: []string{"10:15:30"},                               // upTime read-only
+		8: []string{ // lastTimeUpdated list read-only
 			time.Now().Add(-5 * time.Minute).Format("2006-01-02 15:04:05"),
 		},
-		9:  []int{1}, // operationalStatus list
-		10: []int{0}, // reset list
+		9:  []int{1}, // operationalStatus read-only
+		10: []int{0}, // reset read-write
 	},
 	2: map[int]interface{}{ // sensors Table
-		1: []string{"00:1B:44:11:3A:B8", "00:1B:44:11:3A:B9", "00:1B:44:11:3A:D1", "00:1B:44:11:3A:D2", "00:1B:44:11:3A:D3"}, // id list
-		2: []string{"Light", "Temperature", "Motion", "Door", "Window"},                                                      // type list
-		3: []int{75, 22, 0, 1, 0},                                                                                            // status list
-		4: []int{0, -10, 0, 0, 0},                                                                                            // minValue list
-		5: []int{100, 40, 1, 1, 1},                                                                                           // maxValue list
-		6: []string{ // lastSamplingTime list
+		1: []string{"00:1B:44:11:3A:B8", "00:1B:44:11:3A:B9", "00:1B:44:11:3A:D1", "00:1B:44:11:3A:D2", "00:1B:44:11:3A:D3"}, // id list read-only
+		2: []string{"Light", "Temperature", "Motion", "Door", "Window"},                                                      // type list read-only
+		3: []int{75, 22, 0, 1, 0},                                                                                            // status list read-only
+		4: []int{0, -10, 0, 0, 0},                                                                                            // minValue list read-only
+		5: []int{100, 40, 1, 1, 1},                                                                                           // maxValue list read-only
+		6: []string{ // lastSamplingTime list read-only
 			time.Now().Add(-30 * time.Second).Format("2006-01-02 15:04:05"),
 			time.Now().Add(-15 * time.Second).Format("2006-01-02 15:04:05"),
 			time.Now().Add(-45 * time.Second).Format("2006-01-02 15:04:05"),
@@ -42,18 +42,168 @@ var mockLMIB = map[int]interface{}{
 		},
 	},
 	3: map[int]interface{}{ // actuators Table
-		1: []string{"00:1B:44:11:3A:C0", "00:1B:44:11:3A:C1", "00:1B:44:11:3A:E0", "00:1B:44:11:3A:E1"}, // id list
-		2: []string{"Light Switch", "Temperature Control", "Alarm", "Door Lock"},                        // type list
-		3: []int{1, 22, 0, 1},                                                                           // status list
-		4: []int{0, 16, 0, 0},                                                                           // minValue list
-		5: []int{1, 30, 1, 1},                                                                           // maxValue list
-		6: []string{ // lastControlTime list
+		1: []string{"00:1B:44:11:3A:C0", "00:1B:44:11:3A:C1", "00:1B:44:11:3A:E0", "00:1B:44:11:3A:E1"}, // id list read-only
+		2: []string{"Light Switch", "Temperature Control", "Alarm", "Door Lock"},                        // type list read-only
+		3: []int{1, 22, 0, 1},                                                                           // status list read-write
+		4: []int{0, 16, 0, 0},                                                                           // minValue list read-only
+		5: []int{1, 30, 1, 1},                                                                           // maxValue list read-only
+		6: []string{ // lastControlTime list read-only
 			time.Now().Add(-2 * time.Minute).Format("2006-01-02 15:04:05"),
 			time.Now().Add(-2*time.Minute + 30*time.Second).Format("2006-01-02 15:04:05"),
 			time.Now().Add(-3 * time.Minute).Format("2006-01-02 15:04:05"),
 			time.Now().Add(-3*time.Minute + 30*time.Second).Format("2006-01-02 15:04:05"),
 		},
 	},
+}
+
+func handleSetRequest(pdu messages.PDU, conn *net.UDPConn, addr *net.UDPAddr) {
+	var responseValues []types.Tipo
+	var responseErrors []types.Tipo
+
+	// Map of read-write objects
+	readWriteObjects := map[string]bool{
+		"1.3":  true, // beaconRate
+		"1.6":  true, // dateAndTime
+		"1.10": true, // reset
+		"3.3":  true, // actuator status
+	}
+
+	// Process each IID and its corresponding value
+	for i, iid := range pdu.Iid_list.Elements {
+		structure := iid.Value.Structure
+		object := iid.Value.Objecto
+		firstIndex := iid.Value.First_index
+
+		// Check if it's a read-write object
+		objectKey := fmt.Sprintf("%d.%d", structure, object)
+		if !readWriteObjects[objectKey] {
+			errorMsg := fmt.Sprintf("Object %s is read-only", objectKey)
+			responseErrors = append(responseErrors, types.Tipo{
+				Data_Type: 'S',
+				Length:    1,
+				Value:     errorMsg,
+			})
+			continue
+		}
+
+		newValue := pdu.Value_list.Elements[i]
+		var updateError error
+
+		// Handle each writable object type
+		switch {
+		case structure == 1 && object == 3: // beaconRate
+			if val, err := strconv.Atoi(newValue.Value); err == nil {
+				if val > 0 {
+					if deviceGroup, ok := mockLMIB[1].(map[int]interface{}); ok {
+						deviceGroup[3] = []int{val}
+						updateError = nil
+					} else {
+						updateError = fmt.Errorf("internal error accessing device group")
+					}
+				} else {
+					updateError = fmt.Errorf("beacon rate must be positive")
+				}
+			} else {
+				updateError = fmt.Errorf("invalid beacon rate value")
+			}
+
+		case structure == 1 && object == 6: // dateAndTime
+			if _, err := time.Parse("2006-01-02 15:04:05", newValue.Value); err == nil {
+				if deviceGroup, ok := mockLMIB[1].(map[int]interface{}); ok {
+					deviceGroup[6] = []string{newValue.Value}
+					updateError = nil
+				} else {
+					updateError = fmt.Errorf("internal error accessing device group")
+				}
+			} else {
+				updateError = fmt.Errorf("invalid date time format, use YYYY-MM-DD HH:MM:SS")
+			}
+
+		case structure == 1 && object == 10: // reset
+			if val, err := strconv.Atoi(newValue.Value); err == nil {
+				if val == 0 || val == 1 {
+					if deviceGroup, ok := mockLMIB[1].(map[int]interface{}); ok {
+						deviceGroup[10] = []int{val}
+						updateError = nil
+					} else {
+						updateError = fmt.Errorf("internal error accessing device group")
+					}
+				} else {
+					updateError = fmt.Errorf("reset value must be 0 or 1")
+				}
+			} else {
+				updateError = fmt.Errorf("invalid reset value")
+			}
+
+		case structure == 3 && object == 3: // actuator status
+			if val, err := strconv.Atoi(newValue.Value); err == nil {
+				if actuatorGroup, ok := mockLMIB[3].(map[int]interface{}); ok {
+					if firstIndex < 1 || firstIndex > 4 {
+						updateError = fmt.Errorf("invalid actuator index (must be 1-4)")
+						break
+					}
+
+					// Get min and max values for this actuator
+					minValues := actuatorGroup[4].([]int)
+					maxValues := actuatorGroup[5].([]int)
+					actuatorIdx := firstIndex - 1
+
+					if val >= minValues[actuatorIdx] && val <= maxValues[actuatorIdx] {
+						statusList := actuatorGroup[3].([]int)
+						statusList[actuatorIdx] = val
+						actuatorGroup[3] = statusList
+
+						// Update last control time
+						timeList := actuatorGroup[6].([]string)
+						timeList[actuatorIdx] = time.Now().Format("2006-01-02 15:04:05")
+						actuatorGroup[6] = timeList
+
+						updateError = nil
+					} else {
+						updateError = fmt.Errorf("value out of range (min: %d, max: %d)",
+							minValues[actuatorIdx], maxValues[actuatorIdx])
+					}
+				} else {
+					updateError = fmt.Errorf("internal error accessing actuator group")
+				}
+			} else {
+				updateError = fmt.Errorf("invalid actuator status value")
+			}
+		}
+
+		if updateError != nil {
+			responseErrors = append(responseErrors, types.Tipo{
+				Data_Type: 'S',
+				Length:    1,
+				Value:     updateError.Error(),
+			})
+		} else {
+			responseValues = append(responseValues, types.Tipo{
+				Data_Type: 'S',
+				Length:    1,
+				Value:     "Value set successfully",
+			})
+		}
+	}
+
+	// Create response PDU
+	responsePDU := messages.NewPDU(
+		'R',
+		types.NewRequestTimestamp(),
+		"agente",
+		pdu.Iid_list,
+		types.Lists{N_Elements: len(responseValues), Elements: responseValues},
+		types.Lists{N_Elements: len(responseErrors), Elements: responseErrors},
+	)
+
+	serializedPDU := responsePDU.SerializePDU()
+	fmt.Printf("Serialized PDU: %s\n", serializedPDU)
+
+	if _, err := conn.WriteToUDP([]byte(serializedPDU), addr); err != nil {
+		fmt.Printf("Error sending response: %v\n", err)
+	} else {
+		fmt.Println("Response PDU sent successfully")
+	}
 }
 
 func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr) {
@@ -318,6 +468,9 @@ func readPDU(ser *net.UDPConn) {
 
 	if pdu.Tipo == 'G' {
 		sendResponse(pdu, ser, remoteaddr)
+	}
+	if pdu.Tipo == 'S' {
+		handleSetRequest(pdu, ser, remoteaddr)
 	}
 
 	readPDU(ser)

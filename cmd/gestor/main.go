@@ -98,6 +98,81 @@ func getRequest() messages.PDU {
 	return pdu
 }
 
+func setRequest() messages.PDU {
+	time := types.NewRequestTimestamp()
+	messageIdentifier := "gestor"
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Println("\nSET REQUEST")
+	fmt.Println("Available read-write objects:")
+	fmt.Println("1.3 - Beacon Rate")
+	fmt.Println("1.6 - Date and Time")
+	fmt.Println("1.10 - Reset")
+	fmt.Println("3.3.X - Actuator Status")
+
+	fmt.Println("\nHow many values do you want to set?")
+	nIIDs, _ := reader.ReadString('\n')
+	nIIDs = strings.TrimSpace(nIIDs)
+	number, err := strconv.Atoi(nIIDs)
+	if err != nil {
+		fmt.Println("Wrong value, quitting...")
+		os.Exit(1)
+	}
+
+	var iid_list []types.IID_Tipo
+	var value_list []types.Tipo
+
+	for i := 0; i < number; i++ {
+		fmt.Printf("\nValue %d:\n", i+1)
+		fmt.Println("Enter IID (format: x.y or x.y.z):")
+		iidText, _ := reader.ReadString('\n')
+		iidText = strings.TrimSpace(iidText)
+
+		parts := strings.Split(iidText, ".")
+		var structure, object, firstIndex, secondIndex int
+		structure, _ = strconv.Atoi(parts[0])
+		object, _ = strconv.Atoi(parts[1])
+		if len(parts) > 2 {
+			firstIndex, _ = strconv.Atoi(parts[2])
+		}
+
+		// Create and append IID
+		iid := types.NewIID(structure, object, firstIndex, secondIndex)
+		iid_tipo := types.NewIID_Tipo(len(parts), iid)
+		iid_list = append(iid_list, iid_tipo)
+
+		// Get value to set
+		fmt.Println("Enter new value:")
+		valueText, _ := reader.ReadString('\n')
+		valueText = strings.TrimSpace(valueText)
+
+		// Create value tipo based on the object type
+		var tipo types.Tipo
+		if structure == 1 && (object == 6) { // Date and time
+			tipo = types.Tipo{
+				Data_Type: 'S',
+				Length:    1,
+				Value:     valueText,
+			}
+		} else { // Numbers for other cases
+			tipo = types.Tipo{
+				Data_Type: 'I',
+				Length:    1,
+				Value:     valueText,
+			}
+		}
+		value_list = append(value_list, tipo)
+	}
+
+	finalIIDList := types.NewIID_List(len(iid_list), iid_list)
+	finalValueList := types.Lists{
+		N_Elements: len(value_list),
+		Elements:   value_list,
+	}
+
+	return messages.NewPDU('S', time, messageIdentifier, finalIIDList, finalValueList, types.Lists{})
+}
+
 func send() {
 	fmt.Println("Which agent you want to send a message")
 	fmt.Printf("%v", agents)
@@ -125,7 +200,30 @@ func send() {
 
 	defer conn.Close()
 
-	pdu := getRequest()
+	fmt.Println("Which message do you which to send?\n\t1 - GetRequest\n\t2 - SetRequest")
+
+	reader = bufio.NewReader(os.Stdin)
+	line, err = reader.ReadString('\n')
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(line)
+
+	line = strings.TrimSpace(line)
+
+	var pdu messages.PDU
+
+	line = strings.TrimSpace(line)
+
+	if line == "1" {
+		pdu = getRequest()
+	} else if line == "2" {
+		pdu = setRequest()
+	} else {
+		fmt.Println("Wrong value, quitting...")
+		os.Exit(1)
+	}
+
 	serializedPDU := pdu.SerializePDU()
 
 	_, err = conn.Write([]byte(serializedPDU))
