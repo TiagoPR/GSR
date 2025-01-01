@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"gsr/messages"
 	"gsr/messages/types"
+	"gsr/security"
 	"net"
 	"os"
 	"reflect"
@@ -444,11 +447,23 @@ func StartNotificationSender(conn *net.UDPConn, addr *net.UDPAddr) {
 	}
 }
 
-func sendPing(conn *net.UDPConn, addr *net.UDPAddr, ip string) {
-	_, err := conn.WriteToUDP([]byte(ip), addr)
-	if err != nil {
-		fmt.Printf("Couldn't send ping %v", err)
+func sendPing(ser *net.UDPConn, gestorAddr *net.UDPAddr, ip string, config security.SecurityConfig) error {
+	timestamp := time.Now().Format(time.RFC3339)
+	message := ip + timestamp
+
+	securePing := security.SecurePing{
+		IP:   ip,
+		Time: timestamp,
+		HMAC: security.CreateHMAC(message, config.SecretKey),
 	}
+
+	pingData, err := json.Marshal(securePing)
+	if err != nil {
+		return fmt.Errorf("error marshaling ping: %v", err)
+	}
+
+	_, err = ser.WriteToUDP(pingData, gestorAddr)
+	return err
 }
 
 func readPDU(ser *net.UDPConn) {
@@ -479,10 +494,26 @@ func readPDU(ser *net.UDPConn) {
 func main() {
 	var wg sync.WaitGroup
 	if len(os.Args) < 2 {
-		panic("Introduce the agent's IP")
+		panic("Usage: program <agent_IP>")
 	}
 
 	ip := os.Args[1]
+
+	// Load configuration from file
+	config, err := security.LoadConfig("agent_config.json")
+	if err != nil {
+		panic(fmt.Sprintf("Failed to load configuration: %v", err))
+	}
+
+	// Decode hex key to bytes
+	secretKey, err := hex.DecodeString(config.SecretKey)
+	if err != nil {
+		panic(fmt.Sprintf("Invalid secret key format: %v", err))
+	}
+
+	securityConfig := security.SecurityConfig{
+		SecretKey: secretKey,
+	}
 
 	addr := net.UDPAddr{
 		Port: 161,
@@ -501,7 +532,11 @@ func main() {
 	}
 	fmt.Println("Sending ping to gestor")
 	// gestor needs to identify the agent
-	sendPing(ser, &gestorAddr, ip)
+	fmt.Println("Sending authenticated ping to gestor")
+	if err := sendPing(ser, &gestorAddr, ip, securityConfig); err != nil {
+		fmt.Printf("Error sending ping: %v\n", err)
+		return
+	}
 
 	go func() {
 		// Start the notification sender in a goroutine

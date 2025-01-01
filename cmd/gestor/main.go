@@ -2,9 +2,12 @@ package main
 
 import (
 	"bufio"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"gsr/messages"
 	"gsr/messages/types"
+	"gsr/security"
 	"log"
 	"net"
 	"os"
@@ -238,20 +241,32 @@ func send() {
 	receivedPDU.Print()
 }
 
-func listenForPings(pc net.PacketConn) {
+func listenForPings(pc net.PacketConn, config security.SecurityConfig) {
 	for {
 		buf := make([]byte, 1024)
-		_, addr, err := pc.ReadFrom(buf)
+		n, addr, err := pc.ReadFrom(buf)
 		if err != nil {
 			fmt.Printf("Error reading ping: %v\n", err)
 			continue
 		}
 
-		// Only handle as a ping if it's a new agent
+		var securePing security.SecurePing
+		if err := json.Unmarshal(buf[:n], &securePing); err != nil {
+			fmt.Printf("Invalid ping format from %v\n", addr)
+			continue
+		}
+
+		// Verify HMAC
+		message := securePing.IP + securePing.Time
+		if !security.VerifyHMAC(message, securePing.HMAC, config.SecretKey) {
+			fmt.Printf("Invalid HMAC from %v\n", addr)
+			continue
+		}
+
+		// Add to agents list only if HMAC is valid
 		if !contains(agents, addr.String()) {
 			agents = append(agents, addr.String())
-			fmt.Printf("New agent connected from: %s\n", addr.String())
-			fmt.Printf("%v", agents)
+			fmt.Printf("New authenticated agent connected from: %s\n", addr.String())
 		}
 	}
 }
@@ -279,11 +294,26 @@ func listenForNotifications(pc net.PacketConn) {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		panic("Introduce the gestor's IP")
+	if len(os.Args) < 3 {
+		panic("Usage: program <gestor_IP> <secret_key>")
 	}
-	ip := os.Args[1]
 
+	ip := os.Args[1]
+	hexKey := os.Args[2]
+
+	// Decode the hexadecimal key into raw bytes
+	secretKey, err := hex.DecodeString(hexKey)
+	if err != nil {
+		log.Fatalf("Error decoding secret key: %v", err)
+	}
+
+	if len(secretKey) != security.HMAC_KEY_SIZE {
+		log.Fatalf("Secret key must be 32 bytes long, but got %d bytes", len(secretKey))
+	}
+
+	config := security.SecurityConfig{
+		SecretKey: secretKey,
+	}
 	// Listen for UDP packets
 	pc, err := net.ListenPacket("udp", ip+":162")
 	if err != nil {
@@ -292,7 +322,7 @@ func main() {
 	defer pc.Close()
 
 	// Start ping listener in a goroutine
-	go listenForPings(pc)
+	go listenForPings(pc, config)
 
 	// Start notification listener in a goroutine
 	go listenForNotifications(pc)
