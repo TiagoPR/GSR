@@ -225,6 +225,7 @@ func send() {
 	}
 
 	serializedPDU := pdu.SerializePDU()
+	fmt.Println(serializedPDU)
 
 	_, err = conn.Write([]byte(serializedPDU))
 	if err != nil {

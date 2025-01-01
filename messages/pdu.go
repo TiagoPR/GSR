@@ -22,7 +22,6 @@ func (p PDU) SerializePDU() string {
 }
 
 func DeserializePDU(serialized string) PDU {
-	fmt.Println("\nDeserializing PDU...")
 	elements := strings.SplitN(serialized, `\0`, 7)
 	pdu := PDU{}
 	pdu.Tag = elements[0]

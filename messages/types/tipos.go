@@ -157,7 +157,7 @@ func DeserializeIID_Tipo(serialized string) IID_Tipo {
 	return IID_Tipo{
 		Data_Type: elements[0][0],
 		Length:    length,
-		Value:     DeserializeIID(elements[2]),
+		Value:     DeserializeIID(elements[2], length),
 	}
 }
 
@@ -165,20 +165,22 @@ func (i IID) IIDSerialize() string {
 	return fmt.Sprintf(`%d%d%d%d`, i.Structure, i.Objecto, i.First_index, i.Second_index)
 }
 
-func DeserializeIID(serialized string) IID {
+func DeserializeIID(serialized string, length int) IID {
+	fmt.Println("Deserialize IID: ", serialized)
 	var structure, object, firstIndex, secondIndex int
 
+	// Always take first digit as structure
 	if len(serialized) >= 1 {
 		structure, _ = strconv.Atoi(serialized[:1])
 	}
-	if len(serialized) >= 2 {
+
+	// If length is 2, format is x.yy.0 (like 1.10.0)
+	if length == 2 {
+		object, _ = strconv.Atoi(serialized[1:3])
+		firstIndex, _ = strconv.Atoi(serialized[3:])
+	} else { // if length is 3, format is x.y.z (like 1.1.0)
 		object, _ = strconv.Atoi(serialized[1:2])
-	}
-	if len(serialized) >= 3 {
 		firstIndex, _ = strconv.Atoi(serialized[2:3])
-	}
-	if len(serialized) >= 4 {
-		secondIndex, _ = strconv.Atoi(serialized[3:4])
 	}
 
 	return IID{
