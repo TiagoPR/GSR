@@ -241,37 +241,7 @@ func send() {
 	receivedPDU.Print()
 }
 
-func listenForPings(pc net.PacketConn, config security.SecurityConfig) {
-	for {
-		buf := make([]byte, 1024)
-		n, addr, err := pc.ReadFrom(buf)
-		if err != nil {
-			fmt.Printf("Error reading ping: %v\n", err)
-			continue
-		}
-
-		var securePing security.SecurePing
-		if err := json.Unmarshal(buf[:n], &securePing); err != nil {
-			fmt.Printf("Invalid ping format from %v\n", addr)
-			continue
-		}
-
-		// Verify HMAC
-		message := securePing.IP + securePing.Time
-		if !security.VerifyHMAC(message, securePing.HMAC, config.SecretKey) {
-			fmt.Printf("Invalid HMAC from %v\n", addr)
-			continue
-		}
-
-		// Add to agents list only if HMAC is valid
-		if !contains(agents, addr.String()) {
-			agents = append(agents, addr.String())
-			fmt.Printf("New authenticated agent connected from: %s\n", addr.String())
-		}
-	}
-}
-
-func listenForNotifications(pc net.PacketConn) {
+func listenForMessages(pc net.PacketConn, config security.SecurityConfig) {
 	for {
 		buf := make([]byte, 2048)
 		n, addr, err := pc.ReadFrom(buf)
@@ -280,16 +250,36 @@ func listenForNotifications(pc net.PacketConn) {
 			continue
 		}
 
-		// Try to deserialize as PDU
+		// Try to unmarshal as SecurePing first
+		var securePing security.SecurePing
+		if err := json.Unmarshal(buf[:n], &securePing); err == nil {
+			// This is a ping message
+			message := securePing.IP + securePing.Time
+			if !security.VerifyHMAC(message, securePing.HMAC, config.SecretKey) {
+				fmt.Printf("Invalid HMAC from %v\n", addr)
+				continue
+			}
+			// Add to agents list only if HMAC is valid
+			if !contains(agents, addr.String()) {
+				agents = append(agents, addr.String())
+				fmt.Printf("New authenticated agent connected from: %s\n", addr.String())
+				fmt.Println("Which agent you want to send a message")
+				fmt.Printf("%v", agents)
+			}
+			continue
+		}
+
+		// If not a ping, try to handle as PDU
 		serializedPdu := string(buf[:n])
 		pdu := messages.DeserializePDU(serializedPdu)
-
-		// Handle PDU based on type
 		if pdu.Tipo == 'N' { // Notification
 			fmt.Printf("\nReceived Notification from %v\n", addr)
 			pdu.Print()
-
+			continue
 		}
+
+		// If we get here, the message format was not recognized
+		fmt.Printf("Received unknown message format from %v\n", addr)
 	}
 }
 
@@ -321,11 +311,8 @@ func main() {
 	}
 	defer pc.Close()
 
-	// Start ping listener in a goroutine
-	go listenForPings(pc, config)
-
-	// Start notification listener in a goroutine
-	go listenForNotifications(pc)
+	// Start listener in a goroutine
+	go listenForMessages(pc, config)
 
 	// Handle user input in the main goroutine
 	for {
