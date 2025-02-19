@@ -169,19 +169,25 @@ func DeserializeIID(serialized string, length int) IID {
 	fmt.Println("Deserialize IID: ", serialized)
 	var structure, object, firstIndex, secondIndex int
 
-	// Always take first digit as structure
-	if len(serialized) >= 1 {
+	// For a length of 4, parse as structure.object.firstIndex.secondIndex
+	if length == 4 && len(serialized) >= 4 {
 		structure, _ = strconv.Atoi(serialized[:1])
-	}
-
-	// If length is 2, format is x.yy.0 (like 1.10.0)
-	if length == 2 {
-		object, _ = strconv.Atoi(serialized[1:3])
-		firstIndex, _ = strconv.Atoi(serialized[3:])
-	} else { // if length is 3, format is x.y.z (like 1.1.0)
 		object, _ = strconv.Atoi(serialized[1:2])
 		firstIndex, _ = strconv.Atoi(serialized[2:3])
+		secondIndex, _ = strconv.Atoi(serialized[3:4])
+	} else if length == 3 && len(serialized) >= 3 {
+		// Format is x.y.z (like 1.1.0)
+		structure, _ = strconv.Atoi(serialized[:1])
+		object, _ = strconv.Atoi(serialized[1:2])
+		firstIndex, _ = strconv.Atoi(serialized[2:3])
+	} else if length == 2 && len(serialized) >= 3 {
+		// Format is x.yy.0 (like 1.10.0)
+		structure, _ = strconv.Atoi(serialized[:1])
+		object, _ = strconv.Atoi(serialized[1:3])
+		firstIndex = 0
 	}
+
+	fmt.Println("Parsed values:", structure, object, firstIndex, secondIndex)
 
 	return IID{
 		Structure:    structure,
