@@ -192,11 +192,29 @@ func handleSetRequest(pdu messages.PDU, conn *net.UDPConn, addr *net.UDPAddr) {
 		}
 	}
 
+	b := make([]byte, 12)
+	_, err := rand.Read(b)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	// Convert to base64
+	randomString := base64.StdEncoding.EncodeToString(b)
+
+	// Trim to exactly 16 characters
+	randomString = strings.ReplaceAll(randomString, "/", "A")
+	randomString = strings.ReplaceAll(randomString, "+", "B")
+	randomString = randomString[:16]
+
+	// This is the result - a random 16 character string
+	messageIdentifier := randomString
+
 	// Create response PDU
 	responsePDU := messages.NewPDU(
 		'R',
 		types.NewRequestTimestamp(),
-		"agente",
+		messageIdentifier,
 		pdu.Iid_list,
 		types.Lists{N_Elements: len(responseValues), Elements: responseValues},
 		types.Lists{N_Elements: len(responseErrors), Elements: responseErrors},
