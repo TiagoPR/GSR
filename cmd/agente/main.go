@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -11,6 +13,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -210,11 +213,29 @@ func handleSetRequest(pdu messages.PDU, conn *net.UDPConn, addr *net.UDPAddr) {
 }
 
 func sendResponse(receivedPDU messages.PDU, conn *net.UDPConn, addr *net.UDPAddr) {
+	b := make([]byte, 12)
+	_, err := rand.Read(b)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	// Convert to base64
+	randomString := base64.StdEncoding.EncodeToString(b)
+
+	// Trim to exactly 16 characters
+	randomString = strings.ReplaceAll(randomString, "/", "A")
+	randomString = strings.ReplaceAll(randomString, "+", "B")
+	randomString = randomString[:16]
+
+	// This is the result - a random 16 character string
+	messageIdentifier := randomString
+
 	responsePDU := messages.PDU{
 		Tag:               receivedPDU.Tag,
 		Tipo:              'R',
 		Timestamp:         types.NewRequestTimestamp(),
-		MessageIdentifier: "agente",
+		MessageIdentifier: messageIdentifier,
 		Iid_list:          receivedPDU.Iid_list,
 	}
 	var valueElements []types.Tipo
@@ -363,39 +384,64 @@ func processValue(value interface{}) *types.Tipo {
 }
 
 func StartNotificationSender(conn *net.UDPConn, addr *net.UDPAddr) {
-	// Get the device group for beacon rate
+	// Initial setup - get initial rate
 	deviceGroup, ok := mockLMIB[1].(map[int]interface{})
 	if !ok {
 		fmt.Println("Error: Could not access device group")
 		return
 	}
-
-	// Get the beacon rate
 	beaconRates, ok := deviceGroup[3].([]int)
 	if !ok || len(beaconRates) == 0 {
 		fmt.Println("Error: Could not get beacon rate")
 		return
 	}
-	rate := beaconRates[0]
+	currentRate := beaconRates[0]
+	fmt.Printf("Starting with beacon rate: %d seconds\n", currentRate)
 
-	// Create ticker for the beacon rate
-	ticker := time.NewTicker(time.Duration(rate) * time.Second)
+	// Create initial ticker
+	ticker := time.NewTicker(time.Duration(currentRate) * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
+	for {
+		// Wait for the next tick
+		<-ticker.C
+
+		// Always get fresh data directly from mockLMIB
+		// This ensures we see any updates made from other goroutines
+		freshDeviceGroup, ok := mockLMIB[1].(map[int]interface{})
+		if !ok {
+			fmt.Println("Error: Could not access device group")
+			return
+		}
+		freshRates, ok := freshDeviceGroup[3].([]int)
+		if !ok || len(freshRates) == 0 {
+			fmt.Println("Error: Could not get beacon rate")
+			return
+		}
+		freshRate := freshRates[0]
+
+		// Check if rate has changed
+		if freshRate != currentRate {
+			fmt.Printf("Beacon rate changed from %d to %d seconds\n", currentRate, freshRate)
+			// Stop the old ticker
+			ticker.Stop()
+			// Create a new ticker with the updated rate
+			ticker = time.NewTicker(time.Duration(freshRate) * time.Second)
+			// Update our current rate
+			currentRate = freshRate
+		}
+
 		// Get temperature sensor value
 		sensorsTable, ok := mockLMIB[2].(map[int]interface{})
 		if !ok {
 			fmt.Println("Error: Could not access sensors table")
 			continue
 		}
-
 		statusList, ok := sensorsTable[3].([]int)
 		if !ok || len(statusList) < 2 {
 			fmt.Println("Error: Could not access temperature sensor status")
 			continue
 		}
-
 		temperatureValue := statusList[1] // Index 1 is the temperature sensor
 
 		// Create IID list for temperature sensor status
@@ -427,11 +473,29 @@ func StartNotificationSender(conn *net.UDPConn, addr *net.UDPAddr) {
 			},
 		}
 
+		b := make([]byte, 12)
+		_, err := rand.Read(b)
+		if err != nil {
+			fmt.Println("Error:", err)
+			return
+		}
+
+		// Convert to base64
+		randomString := base64.StdEncoding.EncodeToString(b)
+
+		// Trim to exactly 16 characters
+		randomString = strings.ReplaceAll(randomString, "/", "A")
+		randomString = strings.ReplaceAll(randomString, "+", "B")
+		randomString = randomString[:16]
+
+		// This is the result - a random 16 character string
+		messageIdentifier := randomString
+
 		// Create notification PDU
 		pdu := messages.NewPDU(
 			'N', // Notification type
 			types.NewInfoTimestamp(),
-			"agente",
+			messageIdentifier,
 			iidList,
 			valueList,
 			types.Lists{}, // Empty error list
@@ -442,7 +506,8 @@ func StartNotificationSender(conn *net.UDPConn, addr *net.UDPAddr) {
 		if _, err := conn.WriteToUDP([]byte(serializedPDU), addr); err != nil {
 			fmt.Printf("Error sending notification: %v\n", err)
 		} else {
-			fmt.Printf("Notification sent - Temperature: %d°C\n", temperatureValue)
+			fmt.Printf("Notification sent - Temperature: %d°C (current beacon rate: %d seconds)\n",
+				temperatureValue, currentRate)
 		}
 	}
 }

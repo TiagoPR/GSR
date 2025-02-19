@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -36,9 +38,22 @@ func readPDU(ser *net.UDPConn) messages.PDU {
 
 func getRequest() messages.PDU {
 	time := types.NewRequestTimestamp()
-	fmt.Println(time)
-	messageIdentifier := "gestor"
-	fmt.Println(messageIdentifier)
+	b := make([]byte, 12)
+	_, err := rand.Read(b)
+	if err != nil {
+		fmt.Println("Error:", err)
+	}
+
+	// Convert to base64
+	randomString := base64.StdEncoding.EncodeToString(b)
+
+	// Trim to exactly 16 characters
+	randomString = strings.ReplaceAll(randomString, "/", "A")
+	randomString = strings.ReplaceAll(randomString, "+", "B")
+	randomString = randomString[:16]
+
+	// This is the result - a random 16 character string
+	messageIdentifier := randomString
 
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("How many IID do you want to send?")
@@ -47,8 +62,8 @@ func getRequest() messages.PDU {
 	number, err := strconv.Atoi(nIIDS)
 
 	if err != nil {
-		fmt.Println("Wrong value, quitting...")
-		os.Exit(1)
+		fmt.Println("Wrong value, try again...")
+		getRequest()
 	}
 
 	// Initialize the list as an empty slice
@@ -103,7 +118,22 @@ func getRequest() messages.PDU {
 
 func setRequest() messages.PDU {
 	time := types.NewRequestTimestamp()
-	messageIdentifier := "gestor"
+	b := make([]byte, 12)
+	_, err := rand.Read(b)
+	if err != nil {
+		fmt.Println("Error:", err)
+	}
+
+	// Convert to base64
+	randomString := base64.StdEncoding.EncodeToString(b)
+
+	// Trim to exactly 16 characters
+	randomString = strings.ReplaceAll(randomString, "/", "A")
+	randomString = strings.ReplaceAll(randomString, "+", "B")
+	randomString = randomString[:16]
+
+	// This is the result - a random 16 character string
+	messageIdentifier := randomString
 
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("\nSET REQUEST")
@@ -118,8 +148,8 @@ func setRequest() messages.PDU {
 	nIIDs = strings.TrimSpace(nIIDs)
 	number, err := strconv.Atoi(nIIDs)
 	if err != nil {
-		fmt.Println("Wrong value, quitting...")
-		os.Exit(1)
+		fmt.Println("Wrong value, try again...")
+		setRequest()
 	}
 
 	var iid_list []types.IID_Tipo
@@ -223,8 +253,8 @@ func send() {
 	} else if line == "2" {
 		pdu = setRequest()
 	} else {
-		fmt.Println("Wrong value, quitting...")
-		os.Exit(1)
+		fmt.Println("Wrong value, try again...")
+		send()
 	}
 
 	serializedPDU := pdu.SerializePDU()
