@@ -1,3 +1,3 @@
 # GSR
 
-Trabalho prático da cadeira de GSR
+Trabalho prático da cadeira de GSR - 17.6 
